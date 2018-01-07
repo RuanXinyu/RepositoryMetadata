@@ -3,7 +3,9 @@ from bs4 import BeautifulSoup
 import datetime
 import time
 import couchdb
-import src.utils.http_utils as http
+import sys
+sys.path.append("./../")
+import utils.http_utils as http
 
 
 class NugetMetadataGetter:
@@ -31,12 +33,13 @@ class NugetMetadataGetter:
         if "info:sync" not in db:
             db["info:sync"] = {"nuget_last_updated_time": "1970-01-01T00:00:00.000", "sync_entry_count": 0, "sync_add_count": 0, "sync_update_count": 0}
         sync_info = db["info:sync"]
+
         while True:
             start_time = datetime.datetime.now()
             self.last_updated = sync_info["nuget_last_updated_time"]
             url = "https://www.nuget.org/api/v2/Packages?$orderby=LastUpdated&$filter=LastUpdated%%20gt%%20datetime%%27%s%%27" % self.last_updated
-            print("url: " + url)
-            page = http.get_page(url, 120, 5)  #https://www.nuget.org/api/v2/Packages?$orderby=LastUpdated&$filter=LastUpdated%20gt%20datetime%272015-04-11T03:03:05.693%27
+            print("parse url: " + url)
+            page = http.get_page(url, 120, 5)
             soup = BeautifulSoup(page, "html.parser")
             err = soup.find_all("m:error")
             if err:
@@ -44,6 +47,10 @@ class NugetMetadataGetter:
                 return
 
             nodes = soup.find_all("entry")
+            if not nodes:
+            	print("url " + url + ", msg: no entry is found, process exit ...")
+                return
+
             for node in nodes:
                 sync_info["sync_entry_count"] += 1
                 entry = {"xml": unicode(node)}
@@ -66,11 +73,13 @@ class NugetMetadataGetter:
                 doc = db[id] if id in db else {"count": 0, "latest_version": "", "versions": {}}
                 if "is_absolute_latest_version" in entry and entry["is_absolute_latest_version"] == "true":
                     doc["latest_version"] = entry["version"]
+
                 if entry["version"] not in doc["versions"]:
                     doc["count"] += 1
                     sync_info["sync_add_count"] += 1
                 else:
                     sync_info["sync_update_count"] += 1
+                    
                 doc["versions"][entry["version"]] = entry
                 db[id] = doc
 
