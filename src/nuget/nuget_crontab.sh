@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 netstat -lntp | grep 5984
 if [[ $? != "0" ]]; then
