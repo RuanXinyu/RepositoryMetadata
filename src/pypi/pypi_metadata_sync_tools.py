@@ -37,7 +37,7 @@ class PypiMetadataGetter:
 
     def run(self):
         server = couchdb.Server('http://admin:admin@127.0.0.1:5984/')
-        db = server['pypi_1']
+        db = server['pypi']
         if "info:sync" not in db:
             db["info:sync"] = {"changelog_last_serial": 0, "synced_packages_count": 0, "sync_index": 0}
         sync_info = db["info:sync"]
