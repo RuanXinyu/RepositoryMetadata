@@ -7,7 +7,7 @@ if [[ $? != "0" ]]; then
     sleep 10
 fi
 
-ps -ef | grep metadata_sync_tools.py | grep -v grep
+ps -ef | grep pypi_metadata_sync_tools.py | grep -v grep
 if [[ $? != "0" ]]; then
     cd /home/ruandy/workspace/couchdb/RepositoryMetadata/src/pypi
     echo "start pypi_metadata_sync_tools.py ...." | tee output.txt
