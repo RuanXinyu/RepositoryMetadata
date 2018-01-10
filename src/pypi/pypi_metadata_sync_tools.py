@@ -7,6 +7,7 @@ import json
 import os
 import xmlrpclib
 import urllib2
+
 sys.path.append("./../")
 import utils.http_utils as http
 
@@ -80,6 +81,8 @@ class PypiMetadataGetter:
         sync_info["changelog_last_serial"] = data["serial"]
         sync_info["sync_index"] = 0
         db["info:sync"] = sync_info
+        if os.path.exists("packages.json"):
+            os.remove("packages.json")
 
 
 if __name__ == "__main__":
