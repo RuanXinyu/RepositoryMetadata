@@ -8,7 +8,7 @@ import os
 import xmlrpclib
 import urllib2
 sys.path.append("./../")
-import src.utils.http_utils as http
+import utils.http_utils as http
 
 
 class PypiMetadataGetter:
@@ -55,8 +55,10 @@ class PypiMetadataGetter:
                 page = http.get_page(url, 120, 5)
             except urllib2.URLError as ex:
                 if hasattr(ex, 'code') and ex.code == 404:
+                    print("url " + url + ", 404, continue, " + ex.message)
                     continue
                 print("url " + url + ", " + ex.message)
+                exit(1)
 
             doc = json.loads(page)
             if "info" not in doc or "name" not in doc["info"]:
