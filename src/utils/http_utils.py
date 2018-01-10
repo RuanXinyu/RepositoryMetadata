@@ -22,9 +22,9 @@ def get_page(url, timeout=60, retry_times=2):
         try:
             data = urllib2.urlopen(url, timeout=timeout).read()
             return data
-        except ValueError as ex:
-            print("url: " + url + ", " + ex.message)
-        except BaseException as ex:
-            print("url: " + url + ", " + ex.message)
-    raise ValueError("[error]: get page failed, " + url)
+        except urllib2.URLError as ex:
+            if times < retry_times:
+                print("url: " + url + ", " + ex.message)
+            else:
+                raise ex
 

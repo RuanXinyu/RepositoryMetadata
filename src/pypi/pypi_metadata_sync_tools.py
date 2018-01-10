@@ -6,6 +6,7 @@ import sys
 import json
 import os
 import xmlrpclib
+import urllib2
 sys.path.append("./../")
 import src.utils.http_utils as http
 
@@ -48,10 +49,15 @@ class PypiMetadataGetter:
             start_time = datetime.datetime.now()
             url = "https://pypi.python.org/pypi/%s/json" % names[index]
             print("parse url: " + url)
-            page = http.get_page(url, 120, 5)
-            if page.find("Not Found (no releases)") != -1:
-                sync_info["sync_index"] += 1
-                continue
+
+            page = ""
+            try:
+                page = http.get_page(url, 120, 5)
+            except urllib2.URLError as ex:
+                if hasattr(ex, 'code') and ex.code == 404:
+                    continue
+                print("url " + url + ", " + ex.message)
+
             doc = json.loads(page)
             if "info" not in doc or "name" not in doc["info"]:
                 print("url " + url + ", msg: info not in data or name not in data[info]")
