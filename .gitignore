@@ -3,6 +3,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+npm_mirror
+pypi_mirror
+
 *.zip
 *.tar
 *.gz

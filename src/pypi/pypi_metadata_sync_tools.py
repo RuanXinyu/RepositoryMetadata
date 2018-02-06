@@ -70,6 +70,8 @@ class PypiMetadataGetter:
             doc["name"] = names[index]
             if pkg_id not in db:
                 sync_info["synced_packages_count"] += 1
+            else:
+                doc["_rev"] = db[pkg_id].rev
             db[pkg_id] = doc
 
             sync_info["sync_time"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))

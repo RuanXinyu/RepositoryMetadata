@@ -4,6 +4,7 @@ import datetime
 import time
 import couchdb
 import sys
+
 sys.path.append("./../")
 import utils.http_utils as http
 
@@ -13,12 +14,12 @@ class NugetMetadataGetter:
         self.last_updated = ""
         self.top_properties_map = {"title": "title", "updated": "updated", "summary": "summary"}
         self.sub_properties_map = {"d:id": "id",
-                               "d:version": "version",
-                               "d:gallerydetailsurl": "gallery_details_url",
-                               "d:isabsolutelatestversion": "is_absolute_latest_version",
-                               "d:created": "created",
-                               "d:lastupdated": "last_updated",
-                               "d:published": "published"}
+                                   "d:version": "version",
+                                   "d:gallerydetailsurl": "gallery_details_url",
+                                   "d:isabsolutelatestversion": "is_absolute_latest_version",
+                                   "d:created": "created",
+                                   "d:lastupdated": "last_updated",
+                                   "d:published": "published"}
 
     def to_timestamp(self, date_str):
         format = '%Y-%m-%dT%H:%M:%S.%f' if date_str.find(".") != -1 else '%Y-%m-%dT%H:%M:%S'
@@ -31,7 +32,8 @@ class NugetMetadataGetter:
         server = couchdb.Server('http://admin:admin@127.0.0.1:5984/')
         db = server['nuget_v2']
         if "info:sync" not in db:
-            db["info:sync"] = {"nuget_last_updated_time": "1970-01-01T00:00:00.000", "sync_entry_count": 0, "sync_add_count": 0, "sync_update_count": 0}
+            db["info:sync"] = {"nuget_last_updated_time": "1970-01-01T00:00:00.000", "sync_entry_count": 0,
+                               "sync_add_count": 0, "sync_update_count": 0}
         sync_info = db["info:sync"]
 
         while True:
@@ -48,7 +50,7 @@ class NugetMetadataGetter:
 
             nodes = soup.find_all("entry")
             if not nodes:
-            	print("url " + url + ", msg: no entry is found, process exit ...")
+                print("url " + url + ", msg: no entry is found, process exit ...")
                 return
 
             for node in nodes:
@@ -79,11 +81,11 @@ class NugetMetadataGetter:
                     sync_info["sync_add_count"] += 1
                 else:
                     sync_info["sync_update_count"] += 1
-                    
+
                 doc["versions"][entry["version"]] = entry
                 db[id] = doc
 
-                sync_info["sync_time"] = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime(time.time()))
+                sync_info["sync_time"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
                 sync_info["nuget_last_updated_time"] = entry["last_updated"]
                 db["info:sync"] = sync_info
 
