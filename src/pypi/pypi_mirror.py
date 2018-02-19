@@ -6,10 +6,23 @@ import json
 import os
 import xmlrpclib
 import urllib2
+import shutil
 from multiprocessing.dummy import Pool as ThreadPool
 
 
-def get_url(url, timeout=120, retry_times=5):
+cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
+base = "D:\\mirrors\\repository\\pypi\\"
+conf = {
+    "metadata_path": base + "metadata" + os.path.sep,
+    "simple_path": base + "simple" + os.path.sep,
+    "package_path": base + "packages" + os.path.sep,
+    "origin_domain": "pypi.python.org",
+    "download_domain": "mirrors.huaweicloud.com/repository/pypi",
+    "hosted_domain": "mirrors.huaweicloud.com/repository/pypi"
+}
+
+
+def get_url(url, timeout=120, retry_times=5, ignore_codes=(404,)):
     times = 0
     print("get url: %s" % url)
     while times < retry_times:
@@ -17,13 +30,14 @@ def get_url(url, timeout=120, retry_times=5):
         try:
             data = urllib2.urlopen(url, timeout=timeout).read()
             return data
-        except urllib2.URLError as ex:
+        except urllib2.HTTPError as ex:
             if times >= retry_times:
-                if hasattr(ex, 'code') and ex.code == 404:
-                    print("url is 404: " + ex.message)
-                    with open("404.error", 'a') as f:
+                if hasattr(ex, 'code') and ex.code in ignore_codes:
+                    print("====> error, url(%s) is %d: %s" % (url, ex.code, ex.reason))
+                    with open(cur_dir + str(ex.code) + ".error", 'a') as f:
                         f.write(url + "\n")
                     return None
+                print("====> error, url(%s): %s" % (url, ex.reason))
                 raise ex
         print("retry, get url: %s" % url)
 
@@ -38,13 +52,13 @@ def save_data_as_file(filename, data):
     dirname = os.path.dirname(filename)
     if not os.path.exists(dirname):
         os.makedirs(os.path.dirname(filename))
-    with open(filename, 'w') as f:
+    with open(filename, 'wb') as f:
         f.write(data)
 
 
 def create_dir(name):
     if not os.path.exists(name):
-        os.mkdir(os.path.dirname(name))
+        os.makedirs(os.path.dirname(name))
 
 
 def has_new_packages(part, total):
@@ -52,15 +66,6 @@ def has_new_packages(part, total):
         if item not in total:
             return True
     return False
-
-
-base = "D:\\Code\\RepositoryMetadata\\pypi_mirror\\"
-conf = {
-    "metadata_path": base + "metadata" + os.path.sep,
-    "simple_path": base + "simple" + os.path.sep,
-    "package_path": base + "packages" + os.path.sep,
-    "download_url_replacement": ["pypi.python.org", "mirrors.huaweicloud.com/repository/pypi"]
-}
 
 
 class PypiSyncPackages:
@@ -93,26 +98,27 @@ class PypiSyncPackages:
                     filename = conf["package_path"] + item["path"]
                     if os.path.exists(filename):
                         continue
-                    url = item["url"]
-                    if "download_url_replacement" in conf:
-                        url = url.replace(conf["download_url_replacement"][0], conf["download_url_replacement"][1])
-                    data = get_url(url)
-                    save_data_as_file(filename, data)
-                    print("save file: %s" % filename)
-                    local_md5 = md5(data)
-                    if item["md5_digest"] != local_md5:
-                        print("md5 error: %s, remote: %s, local: %s" % (filename, item["md5_digest"], local_md5))
-                        os.remove(filename)
-                        exit(-1)
-                    self.updating_info["updated_file_count"] += 1
-                    self.save_updating_info()
+
+                    if "download_domain" in conf:
+                        item["url"] = item["url"].replace(conf["origin_domain"], conf["download_domain"])
+                    data = get_url(item["url"])
+                    if data:
+                        save_data_as_file(filename, data)
+                        print("save file: %s" % filename)
+                        local_md5 = md5(data)
+                        if item["md5_digest"] != local_md5:
+                            print("md5 error: %s, remote: %s, local: %s" % (filename, item["md5_digest"], local_md5))
+                            os.remove(filename)
+                            exit(-1)
+                        self.updating_info["updated_file_count"] += 1
+                        self.save_updating_info()
 
             index_data = get_url("https://pypi.python.org/simple/%s/" % package)
             save_data_as_file(conf["simple_path"] + package + os.path.sep + "index.html", index_data)
             if not os.path.exists(conf["metadata_path"] + package + ".json"):
                 self.updating_info["updated_packages_count"] += 1
                 self.save_updating_info()
-            save_data_as_file(conf["metadata_path"] + package + ".json", metadata)
+            save_data_as_file(conf["metadata_path"] + package + ".json", json.dumps(metadata))
         else:
             print("'%s' is not found ..." % package)
 
@@ -130,7 +136,7 @@ class PypiSyncPackages:
 
 
 class PypiMirror:
-    def __init__(self, thread_count=15):
+    def __init__(self, thread_count=1):
         self.client = xmlrpclib.ServerProxy('https://pypi.python.org/pypi')
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
@@ -155,6 +161,23 @@ class PypiMirror:
         with open(self.updating_info_filename, "w") as f:
             json.dump(self.updating_info, f)
 
+    def loading_updating_packages_from_files(self):
+        updating_packages = []
+        if "updating_names_file" in self.updating_info:
+            for filename in self.updating_info["updating_names_file"]:
+                if os.path.exists(filename + ".info"):
+                    with open(filename + ".info", "r") as f:
+                        info = json.load(f)
+                else:
+                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0}
+                with open(filename, "r") as f:
+                    packages = json.load(f)
+                self.updating_info["updated_packages_count"] += info["updated_packages_count"]
+                self.updating_info["updated_file_count"] += info["updated_file_count"]
+                updating_packages += packages[info["updated_index"]:]
+        self.save_updating_info()
+        return updating_packages
+
     def load_mirror_info(self):
         if not os.path.exists(self.updating_info_filename):
             self.save_updating_info()
@@ -167,10 +190,8 @@ class PypiMirror:
             print("get last_serial ...")
             self.updating_info["cur_serial"] = self.client.changelog_last_serial()
             if self.updating_info["last_serial"] == self.updating_info["cur_serial"]:
-                print("no need to update, exit ...")
-                exit(0)
-
-            if self.updating_info["last_serial"] == 0:
+                updating_packages = []
+            elif self.updating_info["last_serial"] == 0:
                 print("====> get all packages ....")
                 # with open("updating_packages.json", "r") as f:
                 #     updating_packages = json.load(f)
@@ -188,13 +209,21 @@ class PypiMirror:
                 if has_new_packages(updating_packages, all_packages):
                     os.remove(conf["metadata_path"] + ".all")
                     self.get_all_packages()
-
-            print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
-            self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
-            self.updating_info["updating_names_count"] = len(updating_packages)
-            self.save_updating_info()
         else:
-            print("continue last updating ....")
+            print("continue last updating, loading updating info....")
+            updating_packages = self.loading_updating_packages_from_files()
+            print("reload mirror info: %s" % self.updating_info)
+
+        if len(updating_packages) == 0:
+            print("no need to update, exit ...")
+            self.updating_info["cur_serial"] = 0
+            self.save_updating_info()
+            exit(0)
+
+        print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
+        self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
+        self.updating_info["updating_names_count"] = len(updating_packages)
+        self.save_updating_info()
 
     def split_packages(self, updating_packages):
         total_count = len(updating_packages)
@@ -207,8 +236,10 @@ class PypiMirror:
             step = total_count / self.thread_count
 
         serial_dir = self.cur_dir + str(self.updating_info["last_serial"])
+        if os.path.exists(serial_dir + "_back"):
+            shutil.rmtree(serial_dir + "_back")
         if os.path.exists(serial_dir):
-            os.remove(serial_dir)
+            os.rename(serial_dir, serial_dir + "_back")
         os.mkdir(serial_dir)
         names = []
         for index in range(0, self.thread_count):

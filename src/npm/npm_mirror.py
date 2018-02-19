@@ -6,11 +6,20 @@ import json
 import os
 import datetime
 import urllib2
-import re
+import shutil
 from multiprocessing.dummy import Pool as ThreadPool
 
 
-def get_url(url, timeout=120, retry_times=5):
+cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
+conf = {
+    "package_path": "D:\\mirrors\\repository\\npm\\",
+    "origin_domain": "registry.npmjs.org",
+    "download_domain": "mirrors.huaweicloud.com/repository/npm",
+    "hosted_domain": "mirrors.huaweicloud.com/repository/npm"
+}
+
+
+def get_url(url, timeout=120, retry_times=5, ignore_codes=(404,)):
     times = 0
     print("get url: %s" % url)
     while times < retry_times:
@@ -18,13 +27,14 @@ def get_url(url, timeout=120, retry_times=5):
         try:
             data = urllib2.urlopen(url, timeout=timeout).read()
             return data
-        except urllib2.URLError as ex:
+        except urllib2.HTTPError as ex:
             if times >= retry_times:
-                if hasattr(ex, 'code') and ex.code == 404:
-                    print("url is 404: " + ex.message)
-                    with open("404.error", 'a') as f:
+                if hasattr(ex, 'code') and ex.code in ignore_codes:
+                    print("====> error, url(%s) is %d: %s" % (url, ex.code, ex.reason))
+                    with open(cur_dir + str(ex.code) + ".error", 'a') as f:
                         f.write(url + "\n")
                     return None
+                print("====> error, url(%s): %s" % (url, ex.reason))
                 raise ex
         print("retry, get url: %s" % url)
 
@@ -39,13 +49,13 @@ def save_data_as_file(filename, data):
     dirname = os.path.dirname(filename)
     if not os.path.exists(dirname):
         os.makedirs(os.path.dirname(filename))
-    with open(filename, 'w') as f:
+    with open(filename, 'wb') as f:
         f.write(data)
 
 
 def create_dir(name):
     if not os.path.exists(name):
-        os.mkdir(os.path.dirname(name))
+        os.makedirs(os.path.dirname(name))
 
 
 def to_timestamp(date_str):
@@ -54,15 +64,6 @@ def to_timestamp(date_str):
     t = d.timetuple()
     timestamp = int(time.mktime(t))
     return timestamp * 1000 + d.microsecond / 1000
-
-
-base = "D:\\Code\\RepositoryMetadata\\npm_mirror\\"
-conf = {
-    "package_path": base + "packages" + os.path.sep,
-    "download_url_replacement": ["registry.npmjs.org", "mirrors.huaweicloud.com/repository/npm"],
-    "url_to_filename": ["https?://registry.npmjs.org/", "files/"],
-    "download_url_modifier": ["https?://registry.npmjs.org/", "https://mirrors.huaweicloud.com/repository/npm/"],
-}
 
 
 class NpmSyncPackages:
@@ -94,22 +95,25 @@ class NpmSyncPackages:
                         continue
 
                     url = version["dist"]["tarball"]
-                    filename = conf["package_path"] + re.sub(conf["url_to_filename"][0], conf["url_to_filename"][1], url)
-                    if "download_url_replacement" in conf:
-                        version["dist"]["tarball"] = re.sub(conf["download_url_modifier"][0], conf["download_url_modifier"][1], url)
-                    if "download_url_replacement" in conf:
-                        url = re.sub(conf["download_url_replacement"][0], conf["download_url_replacement"][1], url)
-                    if not os.path.exists(filename):
+                    index = url.find(conf["origin_domain"])
+                    filename = "dist" + url[index + len(conf["origin_domain"]):]
+                    full_filename = conf["package_path"] + filename
+
+                    if "download_domain" in conf:
+                        url = url.replace(conf["origin_domain"], conf["download_domain"])
+                    if not os.path.exists(full_filename):
                         data = get_url(url)
-                        save_data_as_file(filename, data)
-                        print("save file: %s" % filename)
-                        local_sha1 = sha1(data)
-                        if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
-                            print("sha1 error: %s, remote: %s, local: %s" % (filename, version["dist"]["shasum"], local_sha1))
-                            os.remove(filename)
-                            exit(-1)
-                        self.updating_info["updated_file_count"] += 1
-                        self.save_updating_info()
+                        if data:
+                            version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
+                            save_data_as_file(full_filename, data)
+                            print("save file: %s" % full_filename)
+                            local_sha1 = sha1(data)
+                            if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
+                                print("sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
+                                os.remove(full_filename)
+                                exit(-1)
+                            self.updating_info["updated_file_count"] += 1
+                            self.save_updating_info()
 
             if not os.path.exists(conf["package_path"] + package):
                 self.updating_info["updated_packages_count"] += 1
@@ -130,7 +134,7 @@ class NpmSyncPackages:
 
 
 class NpmMirror:
-    def __init__(self, thread_count=15):
+    def __init__(self, thread_count=1):
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
@@ -174,6 +178,23 @@ class NpmMirror:
         with open(self.updating_info_filename, "w") as f:
             json.dump(self.updating_info, f)
 
+    def loading_updating_packages_from_files(self):
+        updating_packages = []
+        if "updating_names_file" in self.updating_info:
+            for filename in self.updating_info["updating_names_file"]:
+                if os.path.exists(filename + ".info"):
+                    with open(filename + ".info", "r") as f:
+                        info = json.load(f)
+                else:
+                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0}
+                with open(filename, "r") as f:
+                    packages = json.load(f)
+                self.updating_info["updated_packages_count"] += info["updated_packages_count"]
+                self.updating_info["updated_file_count"] += info["updated_file_count"]
+                updating_packages += packages[info["updated_index"]:]
+        self.save_updating_info()
+        return updating_packages
+
     def load_mirror_info(self):
         if not os.path.exists(self.updating_info_filename):
             self.save_updating_info()
@@ -188,16 +209,21 @@ class NpmMirror:
                 updating_packages = self.get_all_packages()
             else:
                 updating_packages = self.changelog_since_serial(self.updating_info["last_serial"])
-                if len(updating_packages) == 0:
-                    print("no need to update, exit ...")
-                    exit(0)
-
-            print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
-            self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
-            self.updating_info["updating_names_count"] = len(updating_packages)
-            self.save_updating_info()
         else:
-            print("continue last updating ....")
+            print("continue last updating, loading updating info....")
+            updating_packages = self.loading_updating_packages_from_files()
+            print("reload mirror info: %s" % self.updating_info)
+
+        if len(updating_packages) == 0:
+            print("no need to update, exit ...")
+            self.updating_info["cur_serial"] = 0
+            self.save_updating_info()
+            exit(0)
+
+        print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
+        self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
+        self.updating_info["updating_names_count"] = len(updating_packages)
+        self.save_updating_info()
 
     def split_packages(self, updating_packages):
         total_count = len(updating_packages)
@@ -210,8 +236,10 @@ class NpmMirror:
             step = total_count / self.thread_count
 
         serial_dir = self.cur_dir + str(self.updating_info["last_serial"])
+        if os.path.exists(serial_dir + "_back"):
+            shutil.rmtree(serial_dir + "_back")
         if os.path.exists(serial_dir):
-            os.remove(serial_dir)
+            os.rename(serial_dir, serial_dir + "_back")
         os.mkdir(serial_dir)
         names = []
         for index in range(0, self.thread_count):
