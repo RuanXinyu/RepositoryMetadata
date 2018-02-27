@@ -48,12 +48,27 @@ def md5(data):
     return h.hexdigest()
 
 
+def is_file_exist(filename):
+    if not os.path.exists(filename):
+        return False
+
+    lock_filename = filename + ".__lock"
+    if os.path.exists(lock_filename):
+        return False
+    return True
+
+
 def save_data_as_file(filename, data):
     dirname = os.path.dirname(filename)
     if not os.path.exists(dirname):
         os.makedirs(os.path.dirname(filename))
+
+    lock_filename = filename + ".__lock"
+    with open(lock_filename, 'wb') as f:
+        f.write("")
     with open(filename, 'wb') as f:
         f.write(data)
+    os.remove(lock_filename)
 
 
 def create_dir(name):
@@ -75,7 +90,7 @@ class PypiSyncPackages:
         self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     def load_packages(self):
-        if not os.path.exists(self.packages_info_file):
+        if not is_file_exist(self.packages_info_file):
             self.save_updating_info()
         with open(self.packages_info_file, "r") as f:
             self.updating_info = json.load(f)
@@ -96,7 +111,7 @@ class PypiSyncPackages:
             for version in metadata["releases"].values():
                 for item in version:
                     filename = conf["package_path"] + item["path"]
-                    if os.path.exists(filename):
+                    if is_file_exist(filename):
                         continue
 
                     if "download_domain" in conf:
@@ -115,7 +130,7 @@ class PypiSyncPackages:
 
             index_data = get_url("https://pypi.python.org/simple/%s/" % package)
             save_data_as_file(conf["simple_path"] + package + os.path.sep + "index.html", index_data)
-            if not os.path.exists(conf["metadata_path"] + package + ".json"):
+            if not is_file_exist(conf["metadata_path"] + package + ".json"):
                 self.updating_info["updated_packages_count"] += 1
                 self.save_updating_info()
             save_data_as_file(conf["metadata_path"] + package + ".json", json.dumps(metadata))
@@ -145,7 +160,7 @@ class PypiMirror:
 
     def get_all_packages(self):
         filename = conf["metadata_path"] + ".all"
-        if os.path.exists(filename):
+        if is_file_exist(filename):
             with open(filename, "r") as f:
                 return json.load(f)
         else:
@@ -165,7 +180,7 @@ class PypiMirror:
         updating_packages = []
         if "updating_names_file" in self.updating_info:
             for filename in self.updating_info["updating_names_file"]:
-                if os.path.exists(filename + ".info"):
+                if is_file_exist(filename + ".info"):
                     with open(filename + ".info", "r") as f:
                         info = json.load(f)
                 else:
@@ -179,7 +194,7 @@ class PypiMirror:
         return updating_packages
 
     def load_mirror_info(self):
-        if not os.path.exists(self.updating_info_filename):
+        if not is_file_exist(self.updating_info_filename):
             self.save_updating_info()
         else:
             with open(self.updating_info_filename, "r") as f:

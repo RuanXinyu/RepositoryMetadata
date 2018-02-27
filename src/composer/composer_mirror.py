@@ -17,21 +17,24 @@ conf = {
     "package_path": "D:\\mirrors\\repository\\php\\",
     "provider_url": "/repository/php/p/%package%$%hash%.json",
     "hosted_domain": [
-        {"name": "", "domain": "http://mirrors.huaweicloud.com:8081/repository/php"},
-        {"name": "_https_cdn", "domain": "https://repo.huaweicloud.com/repository/php"},
-        {"name": "_http", "domain": "http://mirrors.huaweicloud.com/repository/php"},
-        {"name": "_http_cdn", "domain": "http://repo.huaweicloud.com/repository/php"},
+        {"name": "", "domain": "http://mirrors.huaweicloud.com:8081/repository/php", "rename": "http-mirrors.huaweicloud.com.json"},
+        {"name": "_http_cdn", "domain": "http://repo.huaweicloud.com/repository/php", "rename": "http-repo.huaweicloud.com.json"},
+        {"name": "_https", "domain": "https://mirrors.huaweicloud.com/repository/php", "rename": "https-mirrors.huaweicloud.com.json"},
+        {"name": "_https_cdn", "domain": "https://repo.huaweicloud.com/repository/php", "rename": "https-repo.huaweicloud.com.json"},
     ],
     "download_urls": [
         "https://api\.github\.com/repos/[^/]*/[^/]*/zipball/.*",
+        "https://github\.com/[^/]*/[^/]*/archive/.*\.zip",
+        "https://github\.com/[^/]*/[^/]*/releases/download/[^/]*/.*\.zip",
         "https://gitlab\.com/api/v3/projects/[^/]*/repository/archive\.zip.*",
+        "https://gitlab\.com/api/v4/projects/[^/]*/repository/archive\.zip.*",
         "https://bitbucket\.org/[^/]*/[^/]*/get/.*\.zip",
     ],
     "download_urls_blacklist": [".*\.git", ]
 }
 
 
-def get_url(url, timeout=120, retry_times=3, ignore_codes=(404,)):
+def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, 401, 500)):
     times = 0
     print("get url: %s" % url)
     while times < retry_times:
@@ -63,12 +66,27 @@ def sha2(data):
     return h.hexdigest()
 
 
+def is_file_exist(filename):
+    if not os.path.exists(filename):
+        return False
+
+    lock_filename = filename + ".__lock"
+    if os.path.exists(lock_filename):
+        return False
+    return True
+
+
 def save_data_as_file(filename, data):
     dirname = os.path.dirname(filename)
     if not os.path.exists(dirname):
         os.makedirs(os.path.dirname(filename))
+
+    lock_filename = filename + ".__lock"
+    with open(lock_filename, 'wb') as f:
+        f.write("")
     with open(filename, 'wb') as f:
         f.write(data)
+    os.remove(lock_filename)
 
 
 def create_dir(name):
@@ -93,13 +111,13 @@ class ComposerSyncPackages:
         self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     def load_packages(self):
-        if not os.path.exists(self.packages_info_file):
+        if not is_file_exist(self.packages_info_file):
             self.save_updating_info()
         with open(self.packages_info_file, "r") as f:
             self.updating_info = json.load(f)
             print("load packages from '%s': %s" % (self.packages_file, self.updating_info))
 
-        if os.path.exists(self.packages_updated_info_file):
+        if is_file_exist(self.packages_updated_info_file):
             with open(self.packages_updated_info_file, "r") as f:
                 self.packages_updated_info = json.load(f)
 
@@ -121,7 +139,7 @@ class ComposerSyncPackages:
                 return True
         for item in conf["download_urls_blacklist"]:
             if re.match(item, url):
-                return True
+                return False
         with open(cur_dir + "unkown_download_url.txt", 'a') as f:
             f.write(url + "\n")
         return False
@@ -154,22 +172,26 @@ class ComposerSyncPackages:
                     filename += "." + value["dist"]["type"]
                 filename = "dist/" + package["provider_name"] + "/" + filename.replace("/", "-")
                 full_filename = conf["package_path"] + filename
-                # if os.path.exists(full_filename):
-                #     continue
+                if not is_file_exist(full_filename):
+                    data = get_url(url, timeout=480)
+                    if data:
+                        save_data_as_file(full_filename, data)
+                        print("save file: %s" % full_filename)
+                        self.updating_info["updated_file_count"] += 1
+                        self.save_updating_info()
+                else:
+                    print("%s is exist" % full_filename)
 
-                data = get_url(url, timeout=480)
-                if data:
-                    save_data_as_file(full_filename, data)
-                    print("save file: %s" % full_filename)
-                    local_sha1 = sha1(data)
+                if is_file_exist(full_filename):
+                    with open(full_filename, "rb") as f:
+                        data = f.read()
+                        local_sha1 = sha1(data)
                     if "shasum" in value["dist"] and value["dist"]["shasum"] and value["dist"]["shasum"] != "" and value["dist"]["shasum"] != local_sha1:
                         print("sha1 error: %s, remote: %s, local: %s" % (full_filename, value["dist"]["shasum"], local_sha1))
                         os.remove(full_filename)
                         exit(-1)
                     value["dist"]["url"] = conf["hosted_domain"][0]["domain"] + "/" + filename
                     value["dist"]["shasum"] = local_sha1
-                    self.updating_info["updated_file_count"] += 1
-                    self.save_updating_info()
 
         info = {"provider_name": package["provider_name"], "include_name": package["include_name"], "remote_cur_sha256": package["remote_sha256"]}
         for hosted_domain in conf["hosted_domain"]:
@@ -178,7 +200,7 @@ class ComposerSyncPackages:
             metadata_sha2 = sha2(metadata_str)
             metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], package["provider_name"], metadata_sha2)
             cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
-            if not os.path.exists(metadata_filename):
+            if not is_file_exist(metadata_filename):
                 save_data_as_file(metadata_filename, metadata_str)
             info[cur_sha256_name] = metadata_sha2
 
@@ -258,7 +280,7 @@ class ComposerMirror:
 
         updating_packages = []
         for filename in self.updating_info["updating_names_file"]:
-            if os.path.exists(filename + ".info"):
+            if is_file_exist(filename + ".info"):
                 with open(filename + ".info", "r") as f:
                     info = json.load(f)
             else:
@@ -282,7 +304,7 @@ class ComposerMirror:
                     last_sha256_name = "local_last_sha256" + hosted_domain["name"]
                     if last_sha256_name in provider and provider[last_sha256_name]:
                         last_metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], item["provider_name"], provider[last_sha256_name])
-                        if os.path.exists(last_metadata_filename):
+                        if is_file_exist(last_metadata_filename):
                             os.remove(last_metadata_filename)
                         provider[last_sha256_name] = None
 
@@ -324,7 +346,7 @@ class ComposerMirror:
 
                 if last_sha256_name in include_value:
                     last_metadata_filename = "%s%s" % (conf["package_path"], include_name.replace("%hash%", include_value[last_sha256_name]))
-                    if os.path.exists(last_metadata_filename):
+                    if is_file_exist(last_metadata_filename):
                         os.remove(last_metadata_filename)
                     include_value[last_sha256_name] = None
 
@@ -343,11 +365,12 @@ class ComposerMirror:
                 packages_init_json["provider-includes"][include_name] = {"sha256": include_value[cur_sha256_name]}
 
             save_data_as_file("%spackages%s.json" % (conf["package_path"], hosted_domain["name"]), json.dumps(packages_init_json))
+            save_data_as_file("%s%s" % (conf["package_path"], hosted_domain["rename"]), json.dumps(packages_init_json))
         self.save_updating_info()
         return updating_packages
 
     def load_mirror_info(self):
-        if not os.path.exists(self.updating_info_filename):
+        if not is_file_exist(self.updating_info_filename):
             self.save_updating_info()
         else:
             with open(self.updating_info_filename, "r") as f:
