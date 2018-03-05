@@ -25,6 +25,7 @@ conf = {
     "download_urls": [
         "https://api\.github\.com/repos/[^/]*/[^/]*/zipball/.*",
         "https://github\.com/[^/]*/[^/]*/archive/.*\.zip",
+        "https://github\.com/[^/]*/[^/]*/zipball/.*",
         "https://github\.com/[^/]*/[^/]*/releases/download/[^/]*/.*\.zip",
         "https://gitlab\.com/api/v3/projects/[^/]*/repository/archive\.zip.*",
         "https://gitlab\.com/api/v4/projects/[^/]*/repository/archive\.zip.*",
@@ -34,7 +35,7 @@ conf = {
 }
 
 
-def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, 401, 500)):
+def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, 401, 403, 410, 451, 502)):
     times = 0
     print("get url: %s" % url)
     while times < retry_times:
@@ -74,6 +75,8 @@ def is_file_exist(filename):
     if os.path.exists(lock_filename):
         return False
     return True
+
+def
 
 
 def save_data_as_file(filename, data):
@@ -139,6 +142,8 @@ class ComposerSyncPackages:
                 return True
         for item in conf["download_urls_blacklist"]:
             if re.match(item, url):
+                with open(cur_dir + "black_download_url.txt", 'a') as f:
+                    f.write(url + "\n")
                 return False
         with open(cur_dir + "unkown_download_url.txt", 'a') as f:
             f.write(url + "\n")
@@ -239,16 +244,20 @@ class ComposerMirror:
 
         changed_providers = []
         for include_name, new_include_value in new_provider_includes.items():
+            if include_name not in provider_includes:
+                provider_includes[include_name] = {"providers": {}}
+
+            provider_includes[include_name]["remote_cur_sha256"] = new_include_value["sha256"]
+            if "remote_last_sha256" in provider_includes[include_name] and new_include_value["sha256"] == provider_includes[include_name]["remote_last_sha256"]:
+                continue
+
             provider_url = "%s/%s" % (conf["central_url"], include_name.replace("%hash%", new_include_value["sha256"]))
             new_providers_str = get_url(provider_url)
             if not new_providers_str:
                 print("404, exit, %s" % provider_url)
                 exit(0)
 
-            if include_name not in provider_includes:
-                provider_includes[include_name] = {"providers": {}}
             providers = provider_includes[include_name]["providers"]
-
             new_providers = json.loads(new_providers_str)["providers"]
             for provider_name, provider_value in new_providers.items():
                 providers[provider_name] = {"remote_cur_sha256": provider_value["sha256"]}
@@ -320,6 +329,9 @@ class ComposerMirror:
                     self.updating_info["provider_includes"][item["include_name"]]["is_changed" + hosted_domain["name"]] = True
                 provider["remote_last_sha256"] = item["remote_cur_sha256"]
 
+            with open(cur_dir + "updated_packages.list", 'a') as f:
+                f.write("\n".join([json.dumps(item) for item in updated_info]))
+
         # save metadata as file
         for hosted_domain in conf["hosted_domain"]:
             packages_init_json = {
@@ -334,6 +346,8 @@ class ComposerMirror:
             for include_name, include_value in self.updating_info["provider_includes"].items():
                 is_changed_name = "is_changed" + hosted_domain["name"]
                 if is_changed_name not in include_value or not include_value[is_changed_name]:
+                    if cur_sha256_name in include_value:
+                        packages_init_json["provider-includes"][include_name] = {"sha256": include_value[cur_sha256_name]}
                     continue
                 include_value[is_changed_name] = False
 
@@ -344,7 +358,7 @@ class ComposerMirror:
                     if cur_sha256_name in provider_value and provider_value[cur_sha256_name] is not None:
                         all_valid_providers["providers"][provider_name] = {"sha256": provider_value[cur_sha256_name]}
 
-                if last_sha256_name in include_value:
+                if last_sha256_name in include_value and include_value[last_sha256_name]:
                     last_metadata_filename = "%s%s" % (conf["package_path"], include_name.replace("%hash%", include_value[last_sha256_name]))
                     if is_file_exist(last_metadata_filename):
                         os.remove(last_metadata_filename)
@@ -437,6 +451,9 @@ class ComposerMirror:
         pool.join()
 
         self.loading_updating_packages_from_files()
+        for include in self.updating_info["provider_includes"].values():
+            include["remote_last_sha256"] = include["remote_cur_sha256"]
+
         self.updating_info["last_serial"] = self.updating_info["cur_serial"]
         self.updating_info["cur_serial"] = 0
         self.updating_info["updating_names_file"] = []
