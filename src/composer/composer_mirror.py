@@ -62,7 +62,7 @@ class Utils:
     @staticmethod
     def write_json_file(filename, data):
         with open(filename, "wb") as f:
-            json.dump(f, data)
+            json.dump(data, f)
 
     @staticmethod
     def hash(hash_type, data=None, filename=None):
@@ -223,7 +223,8 @@ class ComposerSyncPackages:
             if not Utils.is_file_exist(metadata_filename):
                 Utils.save_data_as_file(metadata_filename, metadata_str)
             info[cur_sha256_name] = metadata_sha2
-        return info
+        self.packages_updated_info.append(info)
+        self.save_packages_updated_info()
 
     def run(self):
         global exit_flag
@@ -235,10 +236,8 @@ class ComposerSyncPackages:
                     break
 
                 print("save_package: '%s'(index=%d) from '%s'" % (updating_packages[index], index, self.packages_file))
-                info = self.save_package(updating_packages[index])
+                self.save_package(updating_packages[index])
 
-                self.packages_updated_info.append(info)
-                self.save_packages_updated_info()
                 self.updating_info["updated_packages_count"] += 1
                 self.updating_info["updated_index"] += 1
                 self.updating_info["updated_time"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
@@ -303,6 +302,8 @@ class ComposerMirror:
 
     def save_updating_info(self):
         print("saving updating info file: %s" % self.updating_info_filename)
+        if Utils.is_file_exist(self.updating_info_filename):
+            shutil.copyfile(self.updating_info_filename, self.updating_info_filename + ".back")
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
 
     def loading_updating_packages_from_files(self):
@@ -483,11 +484,11 @@ class ComposerMirror:
     @staticmethod
     def find_package(package_name):
         includes = Utils.read_json_file(conf["package_path"] + "packages.json")
-        for include_name, include_value in includes["provider_includes"].items():
+        for include_name, include_value in includes["provider-includes"].items():
             filename = "%s%s" % (conf["package_path"], include_name.replace("%hash%", include_value["sha256"]))
             providers = Utils.read_json_file(filename)["providers"]
             if package_name in providers:
-                metadata_filename = filename = "%sp/%s$%s.json" % (conf["package_path"], package_name, providers[package_name]["sha256"])
+                metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], package_name, providers[package_name]["sha256"])
                 print("found: %s, %s" % (filename, metadata_filename))
 
 
