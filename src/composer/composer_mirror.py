@@ -306,7 +306,7 @@ class ComposerMirror:
             shutil.copyfile(self.updating_info_filename, self.updating_info_filename + ".back")
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
 
-    def loading_updating_packages_from_files(self):
+    def get_updating_packages_from_files(self):
         if "updating_names_file" not in self.updating_info:
             return
 
@@ -321,37 +321,42 @@ class ComposerMirror:
             self.updating_info["updated_packages_count"] += info["updated_packages_count"]
             self.updating_info["updated_file_count"] += info["updated_file_count"]
             updating_packages += packages[info["updated_index"]:]
+        return updating_packages
 
-            if info["updated_packages_count"] <= 0:
-                continue
+    def load_updated_packages_from_files(self):
+        if "updating_names_file" not in self.updating_info:
+            return
+
+        lock_file = os.path.dirname(self.updating_info["updating_names_file"][0]) + os.path.sep + "lock"
+        if os.path.exists(lock_file):
+            return
+
+        for filename in self.updating_info["updating_names_file"]:
             updated_info = Utils.read_json_file(filename + ".updated")
             for item in updated_info:
                 provider = self.updating_info["provider_includes"][item["include_name"]]["providers"][item["provider_name"]]
-
-                # delete last metadata file
                 for hosted_domain in conf["hosted_domain"]:
                     last_sha256_name = "local_last_sha256" + hosted_domain["name"]
+                    cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
+                    if cur_sha256_name in provider and item[cur_sha256_name] == provider[cur_sha256_name]:
+                        continue
+
                     if last_sha256_name in provider and provider[last_sha256_name]:
                         last_metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], item["provider_name"], provider[last_sha256_name])
                         if Utils.is_file_exist(last_metadata_filename):
                             os.remove(last_metadata_filename)
                         provider[last_sha256_name] = None
 
-                # update current sha256
-                for hosted_domain in conf["hosted_domain"]:
-                    last_sha256_name = "local_last_sha256" + hosted_domain["name"]
-                    cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
-                    if cur_sha256_name in provider and item[cur_sha256_name] == provider[cur_sha256_name]:
-                        continue
                     if cur_sha256_name in provider and provider[cur_sha256_name]:
                         provider[last_sha256_name] = provider[cur_sha256_name]
                     provider[cur_sha256_name] = item[cur_sha256_name]
                     self.updating_info["provider_includes"][item["include_name"]]["is_changed" + hosted_domain["name"]] = True
                 provider["remote_last_sha256"] = item["remote_cur_sha256"]
-
             Utils.write_file(cur_dir + "updated_packages.list", "\n".join([json.dumps(item) for item in updated_info]), mode="a")
+        self.save_updating_info()
+        self.generate_metadata_files()
 
-        # save metadata as file
+    def generate_metadata_files(self):
         for hosted_domain in conf["hosted_domain"]:
             packages_init_json = {
                 "packages": [],
@@ -398,8 +403,6 @@ class ComposerMirror:
 
             Utils.save_data_as_file("%spackages%s.json" % (conf["package_path"], hosted_domain["name"]), json.dumps(packages_init_json))
             Utils.save_data_as_file("%s%s" % (conf["package_path"], hosted_domain["rename"]), json.dumps(packages_init_json))
-        self.save_updating_info()
-        return updating_packages
 
     def load_mirror_info(self):
         if not Utils.is_file_exist(self.updating_info_filename):
@@ -414,7 +417,8 @@ class ComposerMirror:
             updating_packages = self.get_updating_packages()
         else:
             print("continue last updating, loading updating info....")
-            updating_packages = self.loading_updating_packages_from_files()
+            updating_packages = self.get_updating_packages_from_files()
+            self.load_updated_packages_from_files()
             self.print_updating_info()
 
         if len(updating_packages) == 0:
@@ -467,29 +471,34 @@ class ComposerMirror:
             pool.close()
             pool.join()
 
-            self.loading_updating_packages_from_files()
-            if exit_flag:
+            self.load_updated_packages_from_files()
+            if not exit_flag:
                 for include in self.updating_info["provider_includes"].values():
                     include["remote_last_sha256"] = include["remote_cur_sha256"]
 
-            self.updating_info["last_serial"] = self.updating_info["cur_serial"]
-            self.updating_info["cur_serial"] = 0
-            self.updating_info["updating_names_file"] = []
-            self.updating_info["updating_names_count"] = 0
-            self.save_updating_info()
+                self.updating_info["last_serial"] = self.updating_info["cur_serial"]
+                self.updating_info["cur_serial"] = 0
+                self.updating_info["updating_names_file"] = []
+                self.updating_info["updating_names_count"] = 0
+                self.save_updating_info()
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
 
     @staticmethod
     def find_package(package_name):
+        total_packages = 0
         includes = Utils.read_json_file(conf["package_path"] + "packages.json")
         for include_name, include_value in includes["provider-includes"].items():
             filename = "%s%s" % (conf["package_path"], include_name.replace("%hash%", include_value["sha256"]))
             providers = Utils.read_json_file(filename)["providers"]
+            count = len(providers)
+            total_packages += count
+            print("include name: %s, count: %d" % (include_name, count))
             if package_name in providers:
                 metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], package_name, providers[package_name]["sha256"])
                 print("found: %s, %s" % (filename, metadata_filename))
+        print("total package count: %d" % total_packages)
 
 
 if __name__ == "__main__":
