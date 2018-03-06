@@ -10,6 +10,7 @@ import httplib
 import shutil
 import re
 import sys
+import signal
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -181,6 +182,8 @@ class ComposerSyncPackages:
                 versions = metadata["packages"][metadata["packages"].keys()[0]]
 
             for version, value in versions.items():
+                if exit_flag:
+                    raise BaseException("thread exit")
                 if "dist" not in value or not value["dist"]:
                     continue
 
@@ -227,19 +230,10 @@ class ComposerSyncPackages:
         self.save_packages_updated_info()
 
     def run(self):
-        global exit_flag
         time.sleep(random.randint(1, 10))
         try:
             updating_packages = self.load_packages()
             for index in range(self.updating_info["updated_index"], len(updating_packages)):
-                if os.path.exists(cur_dir + "exit"):
-                    print("[warning]====> find exit flag file, set exit_flag as true")
-                    exit_flag = True
-                    os.remove(cur_dir + "exit")
-
-                if exit_flag:
-                    break
-
                 print("save_package: '%s'(index=%d) from '%s'" % (updating_packages[index], index, self.packages_file))
                 self.save_package(updating_packages[index])
 
@@ -249,8 +243,9 @@ class ComposerSyncPackages:
                 self.save_updating_info()
                 print(self.updating_info)
         except BaseException as ex:
-            print("[exit]==============> %s" % ex.message)
+            print("[exit]==============> %s, %s" % (self.packages_file, ex.message))
             traceback.print_exc()
+            global exit_flag
             exit_flag = True
         return self.updating_info
 
@@ -510,6 +505,12 @@ class ComposerMirror:
                 print("found: %s, %s" % (filename, metadata_filename))
         print("total package count: %d" % total_packages)
 
+    @staticmethod
+    def exit_signal_handler(signum, frame):
+        print("[kill]=====> get g signal, ser exit flag as true ")
+        global exit_flag
+        exit_flag = True
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "find":
@@ -517,4 +518,5 @@ if __name__ == "__main__":
     else:
         Utils.create_dir(conf["package_path"])
         composer = ComposerMirror()
+        signal.signal(signal.SIGTERM, ComposerMirror.exit_signal_handler)
         composer.run()
