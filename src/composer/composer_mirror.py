@@ -116,13 +116,13 @@ class Utils:
             try:
                 data = urllib2.urlopen(url, timeout=timeout).read()
                 return data
-            except urllib2.URLError as ex:
+            except (urllib2.URLError, httplib.HTTPException, httplib.IncompleteRead) as ex:
                 if times >= retry_times:
                     if hasattr(ex, 'code') and ex.code in ignore_codes:
                         print("[warning]====> url(%s), code(%d): %s" % (url, ex.code, ex.reason))
                         Utils.write_file(cur_dir + str(ex.code) + ".error", url + "\n", mode="a")
                         return None
-                    print("[error]====> url(%s): %s" % (url, ex.reason))
+                    print("[error]====> url(%s): %s" % (url, ex.message))
                     raise ex
             except httplib.BadStatusLine as ex:
                 if times >= retry_times:
