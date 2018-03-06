@@ -372,8 +372,6 @@ class ComposerMirror:
         for hosted_domain in conf["hosted_domain"]:
             packages_init_json = {
                 "packages": [],
-                "notify": "https://packagist.org/downloads/%package%",
-                "notify-batch": "https://packagist.org/downloads/",
                 "providers-url": conf["provider_url"],
                 "search": "https://packagist.org/search.json?q=%query%&type=%type%",
                 "provider-includes": {}
