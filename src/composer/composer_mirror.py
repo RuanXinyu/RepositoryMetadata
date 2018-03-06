@@ -233,6 +233,7 @@ class ComposerSyncPackages:
             updating_packages = self.load_packages()
             for index in range(self.updating_info["updated_index"], len(updating_packages)):
                 if os.path.exists(cur_dir + "exit"):
+                    print("[warning]====> find exit flag file, set exit_flag as true")
                     exit_flag = True
                     os.remove(cur_dir + "exit")
 
@@ -333,6 +334,7 @@ class ComposerMirror:
 
         lock_file = os.path.dirname(self.updating_info["updating_names_file"][0]) + os.path.sep + "lock"
         if os.path.exists(lock_file):
+            print("lock file is found, skip loading updated packages from files")
             return
 
         print("========================================> load updated packages from files")
@@ -362,6 +364,7 @@ class ComposerMirror:
                 provider["remote_last_sha256"] = item["remote_cur_sha256"]
             Utils.write_file(cur_dir + "updated_packages.list", "\n".join([json.dumps(item) for item in updated_info]), mode="a")
         self.save_updating_info()
+        Utils.write_file(lock_file, "")
         self.generate_metadata_files()
 
     def generate_metadata_files(self):
