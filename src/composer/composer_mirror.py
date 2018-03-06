@@ -337,6 +337,9 @@ class ComposerMirror:
 
         print("========================================> load updated packages from files")
         for filename in self.updating_info["updating_names_file"]:
+            if not os.path.exists(filename + ".updated"):
+                continue
+
             updated_info = Utils.read_json_file(filename + ".updated")
             for item in updated_info:
                 provider = self.updating_info["provider_includes"][item["include_name"]]["providers"][item["provider_name"]]
