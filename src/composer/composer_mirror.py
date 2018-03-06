@@ -232,6 +232,10 @@ class ComposerSyncPackages:
         try:
             updating_packages = self.load_packages()
             for index in range(self.updating_info["updated_index"], len(updating_packages)):
+                if os.path.exists(cur_dir + "exit"):
+                    exit_flag = True
+                    os.remove(cur_dir + "exit")
+
                 if exit_flag:
                     break
 
@@ -251,7 +255,7 @@ class ComposerSyncPackages:
 
 
 class ComposerMirror:
-    def __init__(self, thread_count=10):
+    def __init__(self, thread_count=25):
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
@@ -331,6 +335,7 @@ class ComposerMirror:
         if os.path.exists(lock_file):
             return
 
+        print("========================================> load updated packages from files")
         for filename in self.updating_info["updating_names_file"]:
             updated_info = Utils.read_json_file(filename + ".updated")
             for item in updated_info:
@@ -357,6 +362,7 @@ class ComposerMirror:
         self.generate_metadata_files()
 
     def generate_metadata_files(self):
+        print("=================================> generate metadata files")
         for hosted_domain in conf["hosted_domain"]:
             packages_init_json = {
                 "packages": [],
@@ -368,6 +374,8 @@ class ComposerMirror:
             }
 
             for include_name, include_value in self.updating_info["provider_includes"].items():
+                cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
+                last_sha256_name = "local_last_sha256" + hosted_domain["name"]
                 is_changed_name = "is_changed" + hosted_domain["name"]
                 if is_changed_name not in include_value or not include_value[is_changed_name]:
                     if cur_sha256_name in include_value:
@@ -375,8 +383,6 @@ class ComposerMirror:
                     continue
                 include_value[is_changed_name] = False
 
-                cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
-                last_sha256_name = "local_last_sha256" + hosted_domain["name"]
                 all_valid_providers = {"providers": {}}
                 for provider_name, provider_value in include_value["providers"].items():
                     if cur_sha256_name in provider_value and provider_value[cur_sha256_name] is not None:
