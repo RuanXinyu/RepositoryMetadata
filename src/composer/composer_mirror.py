@@ -130,6 +130,10 @@ class Utils:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
                     return None
+            except BaseException as ex:
+                if times >= retry_times:
+                    print("[error]====> url(%s): %s" % (url, ex.message))
+                    raise ex
             print("[retry]====> get url: %s" % url)
 
 
@@ -169,6 +173,15 @@ class ComposerSyncPackages:
         Utils.write_file(cur_dir + "unkown_download_url.txt", url + "\n", mode="a")
         return False
 
+    @staticmethod
+    def check_exit_flag():
+        lock_file = cur_dir + "exit"
+        if os.path.exists(lock_file):
+            os.remove(lock_file)
+            raise BaseException("exit file is found, raise an exception")
+        if exit_flag:
+            raise BaseException("exit because exit flag is true")
+
     def save_package(self, package):
         metadata_url = "%s/p/%s$%s.json" % (conf["central_url"], package["provider_name"], package["remote_sha256"])
         metadata_str = Utils.get_url(metadata_url)
@@ -182,8 +195,7 @@ class ComposerSyncPackages:
                 versions = metadata["packages"][metadata["packages"].keys()[0]]
 
             for version, value in versions.items():
-                if exit_flag:
-                    raise BaseException("thread exit")
+                self.check_exit_flag()
                 if "dist" not in value or not value["dist"]:
                     continue
 
@@ -505,12 +517,6 @@ class ComposerMirror:
                 print("found: %s, %s" % (filename, metadata_filename))
         print("total package count: %d" % total_packages)
 
-    @staticmethod
-    def exit_signal_handler(signum, frame):
-        print("[kill]=====> get g signal, ser exit flag as true ")
-        global exit_flag
-        exit_flag = True
-
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "find":
@@ -518,5 +524,4 @@ if __name__ == "__main__":
     else:
         Utils.create_dir(conf["package_path"])
         composer = ComposerMirror()
-        signal.signal(signal.SIGTERM, ComposerMirror.exit_signal_handler)
         composer.run()
