@@ -524,10 +524,31 @@ class ComposerMirror:
                 print("found: %s, %s" % (filename, metadata_filename))
         print("total package count: %d" % total_packages)
 
+    @staticmethod
+    def check_metadata():
+        updating_info = Utils.read_json_file(cur_dir + "updating_info.json")
+        for hosted_domain in conf["hosted_domain"]:
+            for include_name, include_value in updating_info["provider_includes"].items():
+                cur_sha256_name = "local_cur_sha256" + hosted_domain["name"]
+                last_sha256_name = "local_last_sha256" + hosted_domain["name"]
+
+                for provider_name, provider_value in include_value["providers"].items():
+                    if cur_sha256_name in provider_value and provider_value[cur_sha256_name] is not None:
+                        cur_metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], provider_name, provider_value[cur_sha256_name])
+                        if not os.path.exists(cur_metadata_filename):
+                            print(cur_metadata_filename)
+
+                    if last_sha256_name in provider_value and provider_value[last_sha256_name] is not None:
+                        last_metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], provider_name, provider_value[last_sha256_name])
+                        if not os.path.exists(last_metadata_filename):
+                            print(last_metadata_filename)
+
 
 if __name__ == "__main__":
     if len(sys.argv) == 3 and sys.argv[1] == "find":
         ComposerMirror.find_package(sys.argv[2])
+    elif len(sys.argv) == 2 and sys.argv[1] == "check_metadata":
+        ComposerMirror.check_metadata()
     else:
         Utils.create_dir(conf["package_path"])
         composer = ComposerMirror()
