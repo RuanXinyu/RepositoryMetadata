@@ -188,7 +188,7 @@ class ComposerSyncPackages:
             return
         metadata = json.loads(metadata_str)
         if metadata and "packages" in metadata and isinstance(metadata["packages"], dict):
-            for name, versions in metadata["packages"].keys():
+            for name, versions in metadata["packages"].items():
                 for version, value in versions.items():
                     self.check_exit_flag()
                     if "dist" not in value or not value["dist"]:
@@ -277,8 +277,8 @@ class ComposerMirror:
                 provider_includes[include_name] = {"providers": {}}
 
             provider_includes[include_name]["remote_cur_sha256"] = new_include_value["sha256"]
-            # if "remote_last_sha256" in provider_includes[include_name] and new_include_value["sha256"] == provider_includes[include_name]["remote_last_sha256"]:
-            #     continue
+            if "remote_last_sha256" in provider_includes[include_name] and new_include_value["sha256"] == provider_includes[include_name]["remote_last_sha256"]:
+                continue
 
             provider_url = "%s/%s" % (conf["central_url"], include_name.replace("%hash%", new_include_value["sha256"]))
             new_providers_str = Utils.get_url(provider_url)
@@ -296,8 +296,8 @@ class ComposerMirror:
                     providers[provider_name]["remote_cur_sha256"] = provider_value["sha256"]
 
             for provider_name, provider_value in providers.items():
-                # if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
-                #     continue
+                if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
+                    continue
                 changed_providers.append({"include_name": include_name,
                                           "provider_name": provider_name,
                                           "remote_sha256": provider_value["remote_cur_sha256"]})
