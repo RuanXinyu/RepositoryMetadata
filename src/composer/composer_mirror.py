@@ -188,44 +188,40 @@ class ComposerSyncPackages:
             return
         metadata = json.loads(metadata_str)
         if metadata and "packages" in metadata and isinstance(metadata["packages"], dict):
-            if package["provider_name"] in metadata["packages"]:
-                versions = metadata["packages"][package["provider_name"]]
-            else:
-                versions = metadata["packages"][metadata["packages"].keys()[0]]
+            for name, versions in metadata["packages"].keys():
+                for version, value in versions.items():
+                    self.check_exit_flag()
+                    if "dist" not in value or not value["dist"]:
+                        continue
 
-            for version, value in versions.items():
-                self.check_exit_flag()
-                if "dist" not in value or not value["dist"]:
-                    continue
+                    # print("dist url: %s, %s, %s, %s" % (value["dist"]["url"], value["dist"]["reference"], value["dist"]["type"], value["dist"]["shasum"]))
+                    url = value["dist"]["url"]
+                    if not self.is_match_download_urls(url):
+                        continue
 
-                # print("dist url: %s, %s, %s, %s" % (value["dist"]["url"], value["dist"]["reference"], value["dist"]["type"], value["dist"]["shasum"]))
-                url = value["dist"]["url"]
-                if not self.is_match_download_urls(url):
-                    continue
+                    filename = name + "-" + version
+                    if "reference" in value["dist"] and value["dist"]["reference"] and value["dist"]["reference"] != "":
+                        filename += "-" + value["dist"]["reference"][0:8]
+                    if "type" in value["dist"] and value["dist"]["type"] and value["dist"]["type"] != "":
+                        filename += "." + value["dist"]["type"]
+                    filename = "dist/" + package["provider_name"] + "/" + filename.replace("/", "-")
+                    full_filename = conf["package_path"] + filename
+                    if not Utils.is_file_exist(full_filename):
+                        data = Utils.get_url(url, timeout=480)
+                        if data:
+                            Utils.save_data_as_file(full_filename, data)
+                            print("save file: %s" % full_filename)
+                            self.updating_info["updated_file_count"] += 1
+                            self.save_updating_info()
 
-                filename = package["provider_name"] + "-" + version
-                if "reference" in value["dist"] and value["dist"]["reference"] and value["dist"]["reference"] != "":
-                    filename += "-" + value["dist"]["reference"][0:8]
-                if "type" in value["dist"] and value["dist"]["type"] and value["dist"]["type"] != "":
-                    filename += "." + value["dist"]["type"]
-                filename = "dist/" + package["provider_name"] + "/" + filename.replace("/", "-")
-                full_filename = conf["package_path"] + filename
-                if not Utils.is_file_exist(full_filename):
-                    data = Utils.get_url(url, timeout=480)
-                    if data:
-                        Utils.save_data_as_file(full_filename, data)
-                        print("save file: %s" % full_filename)
-                        self.updating_info["updated_file_count"] += 1
-                        self.save_updating_info()
-
-                if Utils.is_file_exist(full_filename):
-                    local_sha1 = Utils.hash("sha1", filename=full_filename)
-                    # if "shasum" in value["dist"] and value["dist"]["shasum"] and value["dist"]["shasum"] != "" and value["dist"]["shasum"] != local_sha1:
-                    #     print("sha1 error: %s, remote: %s, local: %s" % (full_filename, value["dist"]["shasum"], local_sha1))
-                    #     os.remove(full_filename)
-                    #     exit(-1)
-                    value["dist"]["url"] = conf["hosted_domain"][0]["domain"] + "/" + filename
-                    value["dist"]["shasum"] = local_sha1
+                    if Utils.is_file_exist(full_filename):
+                        local_sha1 = Utils.hash("sha1", filename=full_filename)
+                        # if "shasum" in value["dist"] and value["dist"]["shasum"] and value["dist"]["shasum"] != "" and value["dist"]["shasum"] != local_sha1:
+                        #     print("sha1 error: %s, remote: %s, local: %s" % (full_filename, value["dist"]["shasum"], local_sha1))
+                        #     os.remove(full_filename)
+                        #     exit(-1)
+                        value["dist"]["url"] = conf["hosted_domain"][0]["domain"] + "/" + filename
+                        value["dist"]["shasum"] = local_sha1
 
         info = {"provider_name": package["provider_name"], "include_name": package["include_name"], "remote_cur_sha256": package["remote_sha256"]}
         for hosted_domain in conf["hosted_domain"]:
@@ -281,8 +277,8 @@ class ComposerMirror:
                 provider_includes[include_name] = {"providers": {}}
 
             provider_includes[include_name]["remote_cur_sha256"] = new_include_value["sha256"]
-            if "remote_last_sha256" in provider_includes[include_name] and new_include_value["sha256"] == provider_includes[include_name]["remote_last_sha256"]:
-                continue
+            # if "remote_last_sha256" in provider_includes[include_name] and new_include_value["sha256"] == provider_includes[include_name]["remote_last_sha256"]:
+            #     continue
 
             provider_url = "%s/%s" % (conf["central_url"], include_name.replace("%hash%", new_include_value["sha256"]))
             new_providers_str = Utils.get_url(provider_url)
@@ -300,8 +296,8 @@ class ComposerMirror:
                     providers[provider_name]["remote_cur_sha256"] = provider_value["sha256"]
 
             for provider_name, provider_value in providers.items():
-                if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
-                    continue
+                # if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
+                #     continue
                 changed_providers.append({"include_name": include_name,
                                           "provider_name": provider_name,
                                           "remote_sha256": provider_value["remote_cur_sha256"]})
