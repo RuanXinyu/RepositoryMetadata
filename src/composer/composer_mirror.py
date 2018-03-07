@@ -10,7 +10,6 @@ import httplib
 import shutil
 import re
 import sys
-import signal
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -294,7 +293,10 @@ class ComposerMirror:
             providers = provider_includes[include_name]["providers"]
             new_providers = json.loads(new_providers_str)["providers"]
             for provider_name, provider_value in new_providers.items():
-                providers[provider_name] = {"remote_cur_sha256": provider_value["sha256"]}
+                if provider_name not in providers:
+                    providers[provider_name] = {"remote_cur_sha256": provider_value["sha256"]}
+                else:
+                    providers[provider_name]["remote_cur_sha256"] = provider_value["sha256"]
 
             for provider_name, provider_value in providers.items():
                 if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
@@ -305,11 +307,12 @@ class ComposerMirror:
         return changed_providers
 
     def print_updating_info(self):
-        print("mirror info '%s': cur_serial=%d, updated_packages_count=%d, updated_file_count=%d" % (
+        print("mirror info '%s': cur_serial=%d, updated_packages_count=%d, updated_file_count=%d, updating_names_count=%d" % (
             self.updating_info_filename,
             self.updating_info["cur_serial"],
             self.updating_info["updated_packages_count"],
-            self.updating_info["updated_file_count"]
+            self.updating_info["updated_file_count"],
+            self.updating_info["updating_names_count"]
         ))
 
     def save_updating_info(self):
