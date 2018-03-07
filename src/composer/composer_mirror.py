@@ -292,6 +292,7 @@ class ComposerMirror:
 
             providers = provider_includes[include_name]["providers"]
             new_providers = json.loads(new_providers_str)["providers"]
+            print("url: %s, count: %d" % (provider_url, len(new_providers)))
             for provider_name, provider_value in new_providers.items():
                 if provider_name not in providers:
                     providers[provider_name] = {"remote_cur_sha256": provider_value["sha256"]}
@@ -375,6 +376,7 @@ class ComposerMirror:
             Utils.write_file(cur_dir + "updated_packages.list", "\n".join([json.dumps(item) for item in updated_info]), mode="a")
         self.save_updating_info()
         Utils.write_file(lock_file, "")
+        print("========================================> load updated packages from files successfully")
         self.generate_metadata_files()
 
     def generate_metadata_files(self):
@@ -423,6 +425,7 @@ class ComposerMirror:
 
             Utils.save_data_as_file("%spackages%s.json" % (conf["package_path"], hosted_domain["name"]), json.dumps(packages_init_json))
             Utils.save_data_as_file("%s%s" % (conf["package_path"], hosted_domain["rename"]), json.dumps(packages_init_json))
+        print("=================================> generate metadata files successfully")
 
     def load_mirror_info(self):
         if not Utils.is_file_exist(self.updating_info_filename):
@@ -447,10 +450,11 @@ class ComposerMirror:
             self.save_updating_info()
             exit(0)
 
-        print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
+        print("=====> split updating %d packages into %s directory ...." % (len(updating_packages), self.updating_info["last_serial"]))
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
         self.updating_info["updating_names_count"] = len(updating_packages)
         self.save_updating_info()
+        self.print_updating_info()
 
     def split_packages(self, updating_packages):
         total_count = len(updating_packages)
