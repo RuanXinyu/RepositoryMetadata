@@ -172,7 +172,7 @@ class NpmSyncPackages:
                     if not self.is_match_download_urls(url):
                         continue
                     index = url.find(conf["origin_domain"])
-                    filename = url[index + len(conf["origin_domain"]):]
+                    filename = url[index + 1 + len(conf["origin_domain"]):]
                     full_filename = conf["package_path"] + filename
 
                     if "download_domain" in conf:
