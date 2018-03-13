@@ -177,9 +177,9 @@ class ComposerSyncPackages:
         lock_file = cur_dir + "exit"
         if os.path.exists(lock_file):
             os.remove(lock_file)
-            raise BaseException("exit file is found, raise an exception")
+            raise BaseException("exit file is found, raise an exit exception")
         if exit_flag:
-            raise BaseException("exit because exit flag is true")
+            raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
         metadata_url = "%s/p/%s$%s.json" % (conf["central_url"], package["provider_name"], package["remote_sha256"])
@@ -251,7 +251,8 @@ class ComposerSyncPackages:
                 print(self.updating_info)
         except BaseException as ex:
             print("[exit]==============> %s, %s" % (self.packages_file, ex.message))
-            traceback.print_exc()
+            if not ex.message.find("exit exception"):
+                traceback.print_exc()
             global exit_flag
             exit_flag = True
         return self.updating_info
