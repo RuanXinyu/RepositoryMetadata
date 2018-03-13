@@ -19,10 +19,9 @@ from multiprocessing.dummy import Pool as ThreadPool
 reload(sys)
 sys.setdefaultencoding("utf-8")
 default_sockets = socket.socket
-socks.setdefaultproxy(socks.PROXY_TYPE_HTTP, "proxy.huawei.com", 8080, True, "xxx", "xxx")
+socks.setdefaultproxy(socks.PROXY_TYPE_HTTP, "xxxx", 8080, True, "xxx", "xxx")
 cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
-base = "D:\\mirrors\\repository\\pypi\\"
 conf = {
     "metadata_path": "D:\\mirrors\\repository\\pypi\\metadata\\",
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
