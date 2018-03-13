@@ -24,7 +24,7 @@ conf = {
     "download_domain": "cdn.npm.taobao.org",
     "hosted_domain": "mirrors.huaweicloud.com/repository/npm",
     "download_urls": [
-        "https?://[^/]*/[^/]*/\-/[^/]*/.*\.tgz",
+        "https?://[^/]*/[^/]*/\-/.*\.tgz",
     ]
 }
 
@@ -245,7 +245,7 @@ class NpmMirror:
         total_count = self.get_total_doc_count()
         print("total count = %d" % total_count)
         updating_packages = []
-        for count in range(1000, total_count, 1000):
+        for count in range(5000, total_count, 5000):
             json_str = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?skip=%d" % (total_count - count))
             rows = json.loads(json_str)["rows"]
             if Utils.to_timestamp(rows[0]["key"]) >= serial:
@@ -283,7 +283,7 @@ class NpmMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            self.updating_info["cur_serial"] = int(time.time() * 1000)
+            self.updating_info["cur_serial"] = int(time.time() * 5000)
             if self.updating_info["last_serial"] == 0:
                 updating_packages = self.get_all_packages()
             else:
