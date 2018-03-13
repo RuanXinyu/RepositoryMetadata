@@ -347,10 +347,11 @@ class NpmMirror:
                 self.updating_info["updated_packages_count"] += item["updated_packages_count"]
                 self.updating_info["updated_file_count"] += item["updated_file_count"]
 
-            self.updating_info["last_serial"] = self.updating_info["cur_serial"]
-            self.updating_info["cur_serial"] = 0
-            self.updating_info["updating_names_file"] = []
-            self.updating_info["updating_names_count"] = 0
+            if not exit_flag:
+                self.updating_info["last_serial"] = self.updating_info["cur_serial"]
+                self.updating_info["cur_serial"] = 0
+                self.updating_info["updating_names_file"] = []
+                self.updating_info["updating_names_count"] = 0
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except BaseException as ex:
