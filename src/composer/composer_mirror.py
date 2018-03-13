@@ -370,7 +370,7 @@ class ComposerMirror:
                     provider[cur_sha256_name] = item[cur_sha256_name]
                     self.updating_info["provider_includes"][item["include_name"]]["is_changed" + hosted_domain["name"]] = True
                 provider["remote_last_sha256"] = item["remote_cur_sha256"]
-            Utils.write_file(cur_dir + "updated_packages.list", "\n".join([json.dumps(item) for item in updated_info]), mode="a")
+            # Utils.write_file(cur_dir + "updated_packages.list", "\n".join([json.dumps(item) for item in updated_info]), mode="a")
         self.save_updating_info()
         Utils.write_file(lock_file, "")
         print("========================================> load updated packages from files successfully")

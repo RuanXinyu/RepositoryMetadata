@@ -9,6 +9,7 @@ import datetime
 import urllib2
 import httplib
 import shutil
+import re
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
 
@@ -20,8 +21,11 @@ exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
     "origin_domain": "registry.npmjs.org",
-    "download_domain": "mirrors.huaweicloud.com/repository/npm",
-    "hosted_domain": "mirrors.huaweicloud.com/repository/npm"
+    "download_domain": "cdn.npm.taobao.org",
+    "hosted_domain": "mirrors.huaweicloud.com/repository/npm",
+    "download_urls": [
+        "https?://[^/]*/[^/]*/\-/[^/]*/.*\.tgz",
+    ]
 }
 
 
@@ -138,6 +142,14 @@ class NpmSyncPackages:
         Utils.write_json_file(self.packages_info_file, self.updating_info)
 
     @staticmethod
+    def is_match_download_urls(url):
+        for item in conf["download_urls"]:
+            if re.match(item, url):
+                return True
+        Utils.write_file(cur_dir + "unkown_download_url.txt", url + "\n", mode="a")
+        return False
+
+    @staticmethod
     def check_exit_flag():
         lock_file = cur_dir + "exit"
         if os.path.exists(lock_file):
@@ -157,12 +169,15 @@ class NpmSyncPackages:
                         continue
 
                     url = version["dist"]["tarball"]
+                    if not self.is_match_download_urls(url):
+                        continue
                     index = url.find(conf["origin_domain"])
                     filename = url[index + len(conf["origin_domain"]):]
                     full_filename = conf["package_path"] + filename
 
                     if "download_domain" in conf:
-                        url = url.replace(conf["origin_domain"], conf["download_domain"])
+                        if random.randint(1, 2) == 2:
+                            url = url.replace(conf["origin_domain"], conf["download_domain"])
                     if not Utils.is_file_exist(full_filename):
                         data = Utils.get_url(url, timeout=480)
                         if data:
@@ -203,7 +218,7 @@ class NpmSyncPackages:
 
 
 class NpmMirror:
-    def __init__(self, thread_count=1):
+    def __init__(self, thread_count=15):
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
@@ -284,7 +299,7 @@ class NpmMirror:
             self.save_updating_info()
             exit(0)
 
-        print("=====> split updating packages into %s directory ...." % self.updating_info["last_serial"])
+        print("=====> split updating %d packages into %s directory ...." % (len(updating_packages), self.updating_info["last_serial"]))
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
         self.updating_info["updating_names_count"] = len(updating_packages)
         self.save_updating_info()
@@ -337,6 +352,7 @@ class NpmMirror:
             self.updating_info["updating_names_file"] = []
             self.updating_info["updating_names_count"] = 0
             self.save_updating_info()
+            print("[main exit]====>: %s" % self.updating_info)
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
