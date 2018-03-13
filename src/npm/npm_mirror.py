@@ -97,7 +97,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, )):
+    def get_url(url, timeout=120, retry_times=3, ignore_codes=()):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -283,7 +283,7 @@ class NpmMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            self.updating_info["cur_serial"] = int(time.time() * 5000)
+            self.updating_info["cur_serial"] = int(time.time() * 1000)
             if self.updating_info["last_serial"] == 0:
                 updating_packages = self.get_all_packages()
             else:
