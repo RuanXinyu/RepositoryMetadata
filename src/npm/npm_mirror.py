@@ -188,11 +188,11 @@ class NpmSyncPackages:
                             if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
                                 print("sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                                 os.remove(full_filename)
-                                exit(-1)
+                                raise BaseException("[error]====> sha1 error")
                             self.updating_info["updated_file_count"] += 1
                             self.save_updating_info()
 
-            if not Utils.is_file_exist(conf["package_path"] + package):
+            if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
                 self.updating_info["updated_packages_count"] += 1
             Utils.save_data_as_file(conf["package_path"] + package + "/index.json", json.dumps(metadata))
 
