@@ -186,7 +186,7 @@ class NpmSyncPackages:
                             print("save file: %s" % full_filename)
                             local_sha1 = Utils.hash("sha1", data)
                             if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
-                                print("sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
+                                print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                                 os.remove(full_filename)
                                 raise BaseException("[error]====> sha1 error")
                             self.updating_info["updated_file_count"] += 1
