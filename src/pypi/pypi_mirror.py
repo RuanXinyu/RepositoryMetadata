@@ -18,8 +18,6 @@ from multiprocessing.dummy import Pool as ThreadPool
 
 reload(sys)
 sys.setdefaultencoding("utf-8")
-default_sockets = socket.socket
-socks.setdefaultproxy(socks.PROXY_TYPE_HTTP, "xxxx", 8080, True, "xxx", "xxx")
 cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
@@ -28,8 +26,11 @@ conf = {
     "package_path": "D:\\mirrors\\repository\\pypi\\packages\\",
     "origin_domain": "pypi.python.org",
     "download_domain": "mirrors.huaweicloud.com/repository/pypi",
-    "hosted_domain": "mirrors.huaweicloud.com/repository/pypi"
+    "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
+    "rpc_use_proxy": False
 }
+default_sockets = socket.socket
+socks.setdefaultproxy(socks.PROXY_TYPE_HTTP, "xxxx", 8080, True, "xxx", "xxx")
 
 
 class Utils:
@@ -142,7 +143,7 @@ class PypiSyncPackages:
         return Utils.read_json_file(self.packages_file)
 
     def save_updating_info(self):
-        Utils.write_json_file(self.updating_info, self.packages_info_file)
+        Utils.write_json_file(self.packages_info_file, self.updating_info)
 
     @staticmethod
     def check_exit_flag():
@@ -202,7 +203,7 @@ class PypiSyncPackages:
                 print(self.updating_info)
         except BaseException as ex:
             print("[exit]==============> %s, %s" % (self.packages_file, ex.message))
-            if not ex.message.find("exit exception"):
+            if str(ex.message).find("exit exception") == -1:
                 traceback.print_exc()
             global exit_flag
             exit_flag = True
@@ -220,7 +221,8 @@ class PypiMirror:
 
     @staticmethod
     def set_proxy(set=True):
-        socket.socket = socks.socksocket if set else default_sockets
+        if conf["rpc_use_proxy"]:
+            socket.socket = socks.socksocket if set else default_sockets
 
     def get_all_packages(self):
         filename = conf["metadata_path"] + ".all"

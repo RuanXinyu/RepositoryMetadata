@@ -97,7 +97,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=3, ignore_codes=()):
+    def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, 504)):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -209,7 +209,7 @@ class NpmSyncPackages:
                 print(self.updating_info)
         except BaseException as ex:
             print("[exit]==============> %s, %s" % (self.packages_file, ex.message))
-            if not ex.message.find("exit exception"):
+            if str(ex.message).find("exit exception") == -1:
                 traceback.print_exc()
             global exit_flag
             exit_flag = True

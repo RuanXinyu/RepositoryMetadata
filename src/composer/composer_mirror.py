@@ -251,7 +251,7 @@ class ComposerSyncPackages:
                 print(self.updating_info)
         except BaseException as ex:
             print("[exit]==============> %s, %s" % (self.packages_file, ex.message))
-            if not ex.message.find("exit exception"):
+            if str(ex.message).find("exit exception") == -1:
                 traceback.print_exc()
             global exit_flag
             exit_flag = True
