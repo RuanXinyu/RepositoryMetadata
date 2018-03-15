@@ -188,6 +188,12 @@ class ComposerSyncPackages:
             return
         metadata = json.loads(metadata_str)
         if metadata and "packages" in metadata and isinstance(metadata["packages"], dict):
+            if "local_sha256" in package:
+                local_metadata_filename = "%sp/%s$%s.json" % (conf["package_path"], package["provider_name"], package["local_sha256"])
+                if Utils.is_file_exist(local_metadata_filename):
+                    local_metadata = Utils.read_json_file(local_metadata_filename)
+                else:
+                    local_metadata = {"packages": {}}
             for name, versions in metadata["packages"].items():
                 for version, value in versions.items():
                     self.check_exit_flag()
@@ -198,6 +204,13 @@ class ComposerSyncPackages:
                     url = value["dist"]["url"]
                     if not self.is_match_download_urls(url):
                         continue
+
+                    if "local_sha256" in package:
+                        if name in local_metadata["packages"] and version in local_metadata["packages"][name]:
+                            local_version_value = local_metadata["packages"][name][version]
+                            value["dist"]["url"] = local_version_value["dist"]["url"]
+                            value["dist"]["shasum"] = local_version_value["dist"]["shasum"]
+                            continue
 
                     filename = name + "-" + version
                     if "reference" in value["dist"] and value["dist"]["reference"] and value["dist"]["reference"] != "":
@@ -299,9 +312,11 @@ class ComposerMirror:
             for provider_name, provider_value in providers.items():
                 if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
                     continue
-                changed_providers.append({"include_name": include_name,
-                                          "provider_name": provider_name,
-                                          "remote_sha256": provider_value["remote_cur_sha256"]})
+                info = {"include_name": include_name, "provider_name": provider_name, "remote_sha256": provider_value["remote_cur_sha256"]}
+                local_name = "local_cur_sha256" + conf["hosted_domain"][0]["name"]
+                if local_name in provider_value:
+                    info["local_sha256"] = provider_value[local_name]
+                changed_providers.append(info)
         return changed_providers
 
     def print_updating_info(self):
