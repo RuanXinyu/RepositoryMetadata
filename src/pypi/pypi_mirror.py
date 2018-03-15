@@ -101,7 +101,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, )):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(404, )):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:

@@ -108,7 +108,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=3, ignore_codes=(404, 401, 403, 410, 451, 502)):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(404, 401, 403, 410, 451, 502)):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -310,6 +310,8 @@ class ComposerMirror:
                     providers[provider_name]["remote_cur_sha256"] = provider_value["sha256"]
 
             for provider_name, provider_value in providers.items():
+                if provider_name not in new_providers:
+                    del providers[provider_name]
                 if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
                     continue
                 info = {"include_name": include_name, "provider_name": provider_name, "remote_sha256": provider_value["remote_cur_sha256"]}
