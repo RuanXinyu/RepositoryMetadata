@@ -312,6 +312,7 @@ class ComposerMirror:
             for provider_name, provider_value in providers.items():
                 if provider_name not in new_providers:
                     del providers[provider_name]
+                    continue
                 if "remote_last_sha256" in provider_value and provider_value["remote_cur_sha256"] == provider_value["remote_last_sha256"]:
                     continue
                 info = {"include_name": include_name, "provider_name": provider_name, "remote_sha256": provider_value["remote_cur_sha256"]}
