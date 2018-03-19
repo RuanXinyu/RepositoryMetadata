@@ -217,6 +217,7 @@ class PypiMirror:
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
+        self.options = "download"
         self.updating_info = {"last_serial": 0, "cur_serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     @staticmethod
@@ -271,29 +272,33 @@ class PypiMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            print("get last_serial ...")
-            self.set_proxy(True)
-            self.updating_info["cur_serial"] = self.client.changelog_last_serial()
-            self.set_proxy(False)
-            if self.updating_info["last_serial"] == self.updating_info["cur_serial"]:
-                updating_packages = []
-            elif self.updating_info["last_serial"] == 0:
-                print("====> get all packages ....")
-                updating_packages = self.get_all_packages()
-                Utils.write_json_file("updating_packages.json", updating_packages)
+            if self.options == "fix":
+                print("begin getting fixing packages....")
+                updating_packages = self.get_fixing_packages()
             else:
-                print("====> get changelog_since_serial %d ...." % self.updating_info["last_serial"])
+                print("get last_serial ...")
                 self.set_proxy(True)
-                data = self.client.changelog_since_serial(self.updating_info["last_serial"])
+                self.updating_info["cur_serial"] = self.client.changelog_last_serial()
                 self.set_proxy(False)
-                names_list = [item[0] for item in data]
-                updating_packages = list(set(names_list))
+                if self.updating_info["last_serial"] == self.updating_info["cur_serial"]:
+                    updating_packages = []
+                elif self.updating_info["last_serial"] == 0:
+                    print("====> get all packages ....")
+                    updating_packages = self.get_all_packages()
+                    Utils.write_json_file("updating_packages.json", updating_packages)
+                else:
+                    print("====> get changelog_since_serial %d ...." % self.updating_info["last_serial"])
+                    self.set_proxy(True)
+                    data = self.client.changelog_since_serial(self.updating_info["last_serial"])
+                    self.set_proxy(False)
+                    names_list = [item[0] for item in data]
+                    updating_packages = list(set(names_list))
 
-                # if has new package, re-get all packages
-                all_packages = self.get_all_packages()
-                if self.has_new_packages(updating_packages, all_packages):
-                    os.remove(conf["metadata_path"] + ".all")
-                    self.get_all_packages()
+                    # if has new package, re-get all packages
+                    all_packages = self.get_all_packages()
+                    if self.has_new_packages(updating_packages, all_packages):
+                        os.remove(conf["metadata_path"] + ".all")
+                        self.get_all_packages()
         else:
             print("continue last updating, loading updating info....")
             updating_packages = self.loading_updating_packages_from_files()
@@ -363,10 +368,38 @@ class PypiMirror:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
 
+    @staticmethod
+    def get_fixing_packages():
+        packages = Utils.read_json_file(conf["metadata_path"] + ".all")
+        fixing_packages = []
+        for package in packages:
+            metadata_filename = conf["metadata_path"] + package.lower() + ".json"
+            if not Utils.is_file_exist(metadata_filename):
+                fixing_packages.append(package)
+                continue
+
+            metadata = Utils.read_json_file(metadata_filename)
+            if "releases" not in metadata:
+                continue
+
+            is_good = True
+            for version in metadata["releases"].values():
+                for item in version:
+                    filename = conf["package_path"] + item["path"]
+                    if not Utils.is_file_exist(filename):
+                        fixing_packages.append(package)
+                        is_good = False
+                        break
+                if not is_good:
+                    break
+        return fixing_packages
+
 
 if __name__ == "__main__":
     Utils.create_dir(conf["metadata_path"])
     Utils.create_dir(conf["simple_path"])
     Utils.create_dir(conf["package_path"])
     pypi = PypiMirror()
+    if len(sys.argv) == 2 and sys.argv[1] == "fix":
+        pypi.options = "fix"
     pypi.run()
