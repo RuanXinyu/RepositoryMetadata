@@ -183,10 +183,10 @@ class PypiSyncPackages:
                         self.save_updating_info()
 
             index_data = Utils.get_url("https://pypi.python.org/simple/%s/" % package)
-            Utils.save_data_as_file(conf["simple_path"] + package + os.path.sep + "index.html", index_data)
-            if not Utils.is_file_exist(conf["metadata_path"] + package + ".json"):
+            Utils.save_data_as_file(conf["simple_path"] + package.lower() + os.path.sep + "index.html", index_data)
+            if not Utils.is_file_exist(conf["metadata_path"] + package.lower() + ".json"):
                 self.updating_info["updated_packages_count"] += 1
-            Utils.save_data_as_file(conf["metadata_path"] + package + ".json", json.dumps(metadata))
+            Utils.save_data_as_file(conf["metadata_path"] + package.lower() + ".json", json.dumps(metadata))
         else:
             print("'%s' is not found ..." % package)
 
@@ -349,11 +349,10 @@ class PypiMirror:
             pool.close()
             pool.join()
 
-            for item in result:
-                self.updating_info["updated_packages_count"] += item["updated_packages_count"]
-                self.updating_info["updated_file_count"] += item["updated_file_count"]
-
             if not exit_flag:
+                for item in result:
+                    self.updating_info["updated_packages_count"] += item["updated_packages_count"]
+                    self.updating_info["updated_file_count"] += item["updated_file_count"]
                 self.updating_info["last_serial"] = self.updating_info["cur_serial"]
                 self.updating_info["cur_serial"] = 0
                 self.updating_info["updating_names_file"] = []

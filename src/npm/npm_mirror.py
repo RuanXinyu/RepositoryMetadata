@@ -181,7 +181,6 @@ class NpmSyncPackages:
                     if not Utils.is_file_exist(full_filename):
                         data = Utils.get_url(url, timeout=480)
                         if data:
-                            version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
                             Utils.save_data_as_file(full_filename, data)
                             print("save file: %s" % full_filename)
                             local_sha1 = Utils.hash("sha1", data)
@@ -189,6 +188,7 @@ class NpmSyncPackages:
                                 print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                                 os.remove(full_filename)
                                 raise BaseException("[error]====> sha1 error")
+                            version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
                             self.updating_info["updated_file_count"] += 1
                             self.save_updating_info()
 
@@ -343,11 +343,10 @@ class NpmMirror:
             pool.close()
             pool.join()
 
-            for item in result:
-                self.updating_info["updated_packages_count"] += item["updated_packages_count"]
-                self.updating_info["updated_file_count"] += item["updated_file_count"]
-
             if not exit_flag:
+                for item in result:
+                    self.updating_info["updated_packages_count"] += item["updated_packages_count"]
+                    self.updating_info["updated_file_count"] += item["updated_file_count"]
                 self.updating_info["last_serial"] = self.updating_info["cur_serial"]
                 self.updating_info["cur_serial"] = 0
                 self.updating_info["updating_names_file"] = []
