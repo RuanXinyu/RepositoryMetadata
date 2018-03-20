@@ -373,9 +373,15 @@ class PypiMirror:
     def get_fixing_packages():
         packages = Utils.read_json_file(conf["simple_path"] + ".all")
         fixing_packages = []
+        count = 0
         for package in packages:
             package_name = package.lower().replace("_", "-").replace(".", "-")
             metadata_filename = conf["simple_path"] + package_name + os.path.sep + "json"
+
+            count += 1
+            if count % 1000 == 0:
+                print("scan count: %d, need fixing packages: %d" % (count, len(fixing_packages)))
+
             if not Utils.is_file_exist(metadata_filename):
                 fixing_packages.append(package)
                 continue

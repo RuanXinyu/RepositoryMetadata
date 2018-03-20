@@ -33,8 +33,10 @@ def rename():
         package_name = package.lower().replace("_", "-").replace(".", "-")
         old_metadata_filename = conf["metadata_path"] + package.lower() + ".json"
         new_metadata_filename = conf["simple_path"] + package.lower() + os.path.sep + "json"
-        os.renames(old_metadata_filename, new_metadata_filename)
-        os.renames(conf["simple_path"] + package.lower(), conf["simple_path"] + package_name)
+        if os.path.exists(old_metadata_filename):
+            os.renames(old_metadata_filename, new_metadata_filename)
+            os.renames(conf["simple_path"] + package.lower(), conf["simple_path"] + package_name)
+            print(conf["simple_path"] + package_name)
 
 
 if __name__ == "__main__":
