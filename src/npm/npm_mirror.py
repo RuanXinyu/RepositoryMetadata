@@ -21,7 +21,7 @@ exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
     "origin_domain": "registry.npmjs.org",
-    "download_domain": "cdn.npm.taobao.org",
+    # "download_domain": "cdn.npm.taobao.org",
     "hosted_domain": "mirrors.huaweicloud.com/repository/npm",
     "download_urls": [
         "https?://[^/]*/[^/]*/\-/.*\.tgz",
@@ -97,7 +97,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=2, ignore_codes=(404, 500, 504)):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(403, 404, 500, 504)):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -218,7 +218,7 @@ class NpmSyncPackages:
 
 
 class NpmMirror:
-    def __init__(self, thread_count=15):
+    def __init__(self, thread_count=25):
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count

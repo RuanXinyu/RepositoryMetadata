@@ -21,11 +21,10 @@ sys.setdefaultencoding("utf-8")
 cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
-    "metadata_path": "D:\\mirrors\\repository\\pypi\\metadata\\",
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
     "package_path": "D:\\mirrors\\repository\\pypi\\packages\\",
     "origin_domain": "pypi.python.org",
-    "download_domain": "mirrors.huaweicloud.com/repository/pypi",
+    # "download_domain": "mirrors.huaweicloud.com/repository/pypi",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
     "rpc_use_proxy": False
 }
@@ -183,10 +182,11 @@ class PypiSyncPackages:
                         self.save_updating_info()
 
             index_data = Utils.get_url("https://pypi.python.org/simple/%s/" % package)
-            Utils.save_data_as_file(conf["simple_path"] + package.lower() + os.path.sep + "index.html", index_data)
-            if not Utils.is_file_exist(conf["metadata_path"] + package.lower() + ".json"):
+            package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
+            Utils.save_data_as_file(package_path + "index.html", index_data)
+            if not Utils.is_file_exist(package_path + "json"):
                 self.updating_info["updated_packages_count"] += 1
-            Utils.save_data_as_file(conf["metadata_path"] + package.lower() + ".json", json.dumps(metadata))
+            Utils.save_data_as_file(package_path + "json", json.dumps(metadata))
         else:
             print("'%s' is not found ..." % package)
 
@@ -212,7 +212,7 @@ class PypiSyncPackages:
 
 
 class PypiMirror:
-    def __init__(self, thread_count=1):
+    def __init__(self, thread_count=25):
         self.client = xmlrpclib.ServerProxy('https://pypi.python.org/pypi')
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
@@ -226,7 +226,7 @@ class PypiMirror:
             socket.socket = socks.socksocket if set else default_sockets
 
     def get_all_packages(self):
-        filename = conf["metadata_path"] + ".all"
+        filename = conf["simple_path"] + ".all"
         if Utils.is_file_exist(filename):
             return Utils.read_json_file(filename)
         else:
@@ -274,6 +274,7 @@ class PypiMirror:
         if self.updating_info["cur_serial"] == 0:
             if self.options == "fix":
                 print("begin getting fixing packages....")
+                self.updating_info["cur_serial"] = self.updating_info["last_serial"]
                 updating_packages = self.get_fixing_packages()
             else:
                 print("get last_serial ...")
@@ -297,7 +298,7 @@ class PypiMirror:
                     # if has new package, re-get all packages
                     all_packages = self.get_all_packages()
                     if self.has_new_packages(updating_packages, all_packages):
-                        os.remove(conf["metadata_path"] + ".all")
+                        os.remove(conf["simple_path"] + ".all")
                         self.get_all_packages()
         else:
             print("continue last updating, loading updating info....")
@@ -370,10 +371,11 @@ class PypiMirror:
 
     @staticmethod
     def get_fixing_packages():
-        packages = Utils.read_json_file(conf["metadata_path"] + ".all")
+        packages = Utils.read_json_file(conf["simple_path"] + ".all")
         fixing_packages = []
         for package in packages:
-            metadata_filename = conf["metadata_path"] + package.lower() + ".json"
+            package_name = package.lower().replace("_", "-").replace(".", "-")
+            metadata_filename = conf["simple_path"] + package_name + os.path.sep + "json"
             if not Utils.is_file_exist(metadata_filename):
                 fixing_packages.append(package)
                 continue
@@ -396,7 +398,6 @@ class PypiMirror:
 
 
 if __name__ == "__main__":
-    Utils.create_dir(conf["metadata_path"])
     Utils.create_dir(conf["simple_path"])
     Utils.create_dir(conf["package_path"])
     pypi = PypiMirror()

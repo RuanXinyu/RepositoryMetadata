@@ -208,9 +208,10 @@ class ComposerSyncPackages:
                     if "local_sha256" in package:
                         if name in local_metadata["packages"] and version in local_metadata["packages"][name]:
                             local_version_value = local_metadata["packages"][name][version]
-                            value["dist"]["url"] = local_version_value["dist"]["url"]
-                            value["dist"]["shasum"] = local_version_value["dist"]["shasum"]
-                            continue
+                            if "dist" in local_version_value:
+                                value["dist"]["url"] = local_version_value["dist"]["url"]
+                                value["dist"]["shasum"] = local_version_value["dist"]["shasum"]
+                                continue
 
                     filename = name + "-" + version
                     if "reference" in value["dist"] and value["dist"]["reference"] and value["dist"]["reference"] != "":
