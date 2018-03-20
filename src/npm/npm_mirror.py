@@ -188,9 +188,9 @@ class NpmSyncPackages:
                                 print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                                 os.remove(full_filename)
                                 raise BaseException("[error]====> sha1 error")
-                            version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
                             self.updating_info["updated_file_count"] += 1
                             self.save_updating_info()
+                    version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
 
             if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
                 self.updating_info["updated_packages_count"] += 1
