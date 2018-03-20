@@ -197,7 +197,7 @@ class ComposerSyncPackages:
             for name, versions in metadata["packages"].items():
                 for version, value in versions.items():
                     self.check_exit_flag()
-                    if "dist" not in value or not value["dist"]:
+                    if "dist" not in value or not value["dist"] or version.find("dev-") != -1:
                         continue
 
                     # print("dist url: %s, %s, %s, %s" % (value["dist"]["url"], value["dist"]["reference"], value["dist"]["type"], value["dist"]["shasum"]))
