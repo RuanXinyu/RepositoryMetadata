@@ -100,7 +100,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=2, ignore_codes=(404, )):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(400, 404, )):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -154,41 +154,49 @@ class PypiSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        metadata = Utils.get_url("https://pypi.python.org/pypi/%s/json" % package)
-        if metadata:
-            metadata = json.loads(metadata)
-            if "releases" not in metadata:
+        package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
+        use_local_metadata = False
+        if conf["options"] == "fix" and Utils.is_file_exist(package_path + "json"):
+            metadata = Utils.read_json_file(package_path + "json")
+            use_local_metadata = True
+        else:
+            metadata = Utils.get_url("https://pypi.python.org/pypi/%s/json" % package)
+            if metadata:
+                metadata = json.loads(metadata)
+            else:
                 return
-            for version in metadata["releases"].values():
-                for item in version:
-                    self.check_exit_flag()
-                    filename = conf["package_path"] + item["path"]
-                    if Utils.is_file_exist(filename):
-                        continue
 
-                    if "download_domain" in conf:
-                        if random.randint(1, 2) == 2:
-                            item["url"] = item["url"].replace(conf["origin_domain"], conf["download_domain"])
-                    data = Utils.get_url(item["url"])
-                    if data:
-                        Utils.save_data_as_file(filename, data)
-                        print("save file: %s" % filename)
-                        local_md5 = Utils.hash("md5", data)
-                        if item["md5_digest"] != local_md5:
-                            print("md5 error: %s, remote: %s, local: %s" % (filename, item["md5_digest"], local_md5))
-                            os.remove(filename)
-                            raise BaseException("[error]====> md5 error")
-                        self.updating_info["updated_file_count"] += 1
-                        self.save_updating_info()
+        if "releases" not in metadata:
+            return
+        for version in metadata["releases"].values():
+            for item in version:
+                self.check_exit_flag()
+                filename = conf["package_path"] + item["path"]
+                if Utils.is_file_exist(filename):
+                    continue
 
+                if "download_domain" in conf:
+                    if random.randint(1, 2) == 2:
+                        item["url"] = item["url"].replace(conf["origin_domain"], conf["download_domain"])
+                data = Utils.get_url(item["url"])
+                if data:
+                    Utils.save_data_as_file(filename, data)
+                    print("save file: %s" % filename)
+                    local_md5 = Utils.hash("md5", data)
+                    if item["md5_digest"] != local_md5:
+                        print("md5 error: %s, remote: %s, local: %s" % (filename, item["md5_digest"], local_md5))
+                        os.remove(filename)
+                        raise BaseException("[error]====> md5 error")
+                    self.updating_info["updated_file_count"] += 1
+                    self.save_updating_info()
+
+        if not use_local_metadata or not Utils.is_file_exist(package_path + "json"):
             index_data = Utils.get_url("https://pypi.python.org/simple/%s/" % package)
             package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
             Utils.save_data_as_file(package_path + "index.html", index_data)
             if not Utils.is_file_exist(package_path + "json"):
                 self.updating_info["updated_packages_count"] += 1
             Utils.save_data_as_file(package_path + "json", json.dumps(metadata))
-        else:
-            print("'%s' is not found ..." % package)
 
     def run(self):
         time.sleep(random.randint(1, 10))
@@ -217,7 +225,6 @@ class PypiMirror:
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
-        self.options = "download"
         self.updating_info = {"last_serial": 0, "cur_serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     @staticmethod
@@ -227,17 +234,14 @@ class PypiMirror:
 
     def get_all_packages(self):
         filename = conf["simple_path"] + ".all"
-        if Utils.is_file_exist(filename):
-            return Utils.read_json_file(filename)
-        else:
-            self.set_proxy(True)
-            packages = self.client.list_packages()
-            self.set_proxy(False)
-            Utils.write_json_file(filename, packages)
+        self.set_proxy(True)
+        packages = self.client.list_packages()
+        self.set_proxy(False)
+        Utils.write_json_file(filename, packages)
 
-            index_data = Utils.get_url("https://pypi.python.org/simple/")
-            Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
-            return packages
+        index_data = Utils.get_url("https://pypi.python.org/simple/")
+        Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
+        return packages
 
     def save_updating_info(self):
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
@@ -272,10 +276,11 @@ class PypiMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            if self.options == "fix":
+            if os.path.exists(cur_dir + "fix"):
+                conf["options"] = "fix"
                 print("begin getting fixing packages....")
+                updating_packages = self.get_all_packages()
                 self.updating_info["cur_serial"] = self.updating_info["last_serial"]
-                updating_packages = self.get_fixing_packages()
             else:
                 print("get last_serial ...")
                 self.set_proxy(True)
@@ -286,7 +291,6 @@ class PypiMirror:
                 elif self.updating_info["last_serial"] == 0:
                     print("====> get all packages ....")
                     updating_packages = self.get_all_packages()
-                    Utils.write_json_file("updating_packages.json", updating_packages)
                 else:
                     print("====> get changelog_since_serial %d ...." % self.updating_info["last_serial"])
                     self.set_proxy(True)
@@ -363,50 +367,17 @@ class PypiMirror:
                 self.updating_info["cur_serial"] = 0
                 self.updating_info["updating_names_file"] = []
                 self.updating_info["updating_names_count"] = 0
+                if os.path.exists(cur_dir + "fix"):
+                    os.remove(cur_dir + 'fix')
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
 
-    @staticmethod
-    def get_fixing_packages():
-        packages = Utils.read_json_file(conf["simple_path"] + ".all")
-        fixing_packages = []
-        count = 0
-        for package in packages:
-            package_name = package.lower().replace("_", "-").replace(".", "-")
-            metadata_filename = conf["simple_path"] + package_name + os.path.sep + "json"
-
-            count += 1
-            if count % 1000 == 0:
-                print("scan count: %d, need fixing packages: %d" % (count, len(fixing_packages)))
-
-            if not Utils.is_file_exist(metadata_filename):
-                fixing_packages.append(package)
-                continue
-
-            metadata = Utils.read_json_file(metadata_filename)
-            if "releases" not in metadata:
-                continue
-
-            is_good = True
-            for version in metadata["releases"].values():
-                for item in version:
-                    filename = conf["package_path"] + item["path"]
-                    if not Utils.is_file_exist(filename):
-                        fixing_packages.append(package)
-                        is_good = False
-                        break
-                if not is_good:
-                    break
-        return fixing_packages
-
 
 if __name__ == "__main__":
     Utils.create_dir(conf["simple_path"])
     Utils.create_dir(conf["package_path"])
     pypi = PypiMirror()
-    if len(sys.argv) == 2 and sys.argv[1] == "fix":
-        pypi.options = "fix"
     pypi.run()

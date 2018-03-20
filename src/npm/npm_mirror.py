@@ -159,42 +159,51 @@ class NpmSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        metadata_str = Utils.get_url("https://skimdb.npmjs.com/registry/%s" % package)
-        if metadata_str:
-            metadata = json.loads(metadata_str)
-            if metadata and "versions" in metadata:
-                for version in metadata["versions"].values():
-                    self.check_exit_flag()
-                    if "dist" not in version:
-                        continue
+        if conf["options"] == "fix" and Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
+            metadata = Utils.read_json_file(conf["package_path"] + package + "/index.json")
+        else:
+            metadata_str = Utils.get_url("https://skimdb.npmjs.com/registry/%s" % package)
+            if metadata_str:
+                metadata = json.loads(metadata_str)
+            else:
+                return
 
-                    url = version["dist"]["tarball"]
-                    if not self.is_match_download_urls(url):
-                        continue
-                    index = url.find(conf["origin_domain"])
-                    filename = url[index + 1 + len(conf["origin_domain"]):]
-                    full_filename = conf["package_path"] + filename
+        if metadata and "versions" in metadata:
+            for version in metadata["versions"].values():
+                self.check_exit_flag()
+                if "dist" not in version:
+                    continue
 
-                    if "download_domain" in conf:
-                        if random.randint(1, 2) == 2:
-                            url = url.replace(conf["origin_domain"], conf["download_domain"])
-                    if not Utils.is_file_exist(full_filename):
-                        data = Utils.get_url(url, timeout=480)
-                        if data:
-                            Utils.save_data_as_file(full_filename, data)
-                            print("save file: %s" % full_filename)
-                            local_sha1 = Utils.hash("sha1", data)
-                            if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
-                                print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
-                                os.remove(full_filename)
-                                raise BaseException("[error]====> sha1 error")
-                            self.updating_info["updated_file_count"] += 1
-                            self.save_updating_info()
+                url = version["dist"]["tarball"]
+                if not self.is_match_download_urls(url):
+                    continue
+                index = url.find(conf["origin_domain"])
+                filename = url[index + 1 + len(conf["origin_domain"]):]
+                full_filename = conf["package_path"] + filename
+
+                if "download_domain" in conf:
+                    if random.randint(1, 2) == 2:
+                        url = url.replace(conf["origin_domain"], conf["download_domain"])
+                if not Utils.is_file_exist(full_filename):
+                    data = Utils.get_url(url)
+                    if data:
+                        Utils.save_data_as_file(full_filename, data)
+                        print("save file: %s" % full_filename)
+                        local_sha1 = Utils.hash("sha1", data)
+                        if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
+                            print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
+                            os.remove(full_filename)
+                            Utils.write_file(cur_dir + "bad_sha1.error", url + "\n", mode="a")
+                            # raise BaseException("[error]====> sha1 error")
+                        self.updating_info["updated_file_count"] += 1
+                        self.save_updating_info()
+
+                if Utils.is_file_exist(full_filename):
                     version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
 
-            if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
-                self.updating_info["updated_packages_count"] += 1
-            Utils.save_data_as_file(conf["package_path"] + package + "/index.json", json.dumps(metadata))
+        if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
+            self.updating_info["updated_packages_count"] += 1
+        Utils.save_data_as_file(conf["package_path"] + package + "/index.json", json.dumps(metadata))
 
     def run(self):
         try:
@@ -232,13 +241,10 @@ class NpmMirror:
     @staticmethod
     def get_all_packages():
         filename = conf["package_path"] + ".all"
-        if Utils.is_file_exist(filename):
-            all_packages = Utils.read_json_file(filename)
-        else:
-            print("get all docs from 'https://skimdb.npmjs.com/registry/_all_docs'")
-            all_packages = Utils.get_url("https://skimdb.npmjs.com/registry/_all_docs", timeout=600)
-            Utils.save_data_as_file(filename, all_packages)
-            all_packages = json.loads(all_packages)
+        print("get all docs from 'https://skimdb.npmjs.com/registry/_all_docs'")
+        all_packages = Utils.get_url("https://skimdb.npmjs.com/registry/_all_docs", timeout=600)
+        Utils.save_data_as_file(filename, all_packages)
+        all_packages = json.loads(all_packages)
         return [item["id"] for item in all_packages["rows"]]
 
     def changelog_since_serial(self, serial):
@@ -283,11 +289,17 @@ class NpmMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            self.updating_info["cur_serial"] = int(time.time() * 1000)
-            if self.updating_info["last_serial"] == 0:
+            if os.path.exists(cur_dir + "fix"):
+                conf["options"] = "fix"
+                print("begin getting fixing packages....")
                 updating_packages = self.get_all_packages()
+                self.updating_info["cur_serial"] = self.updating_info["last_serial"]
             else:
-                updating_packages = self.changelog_since_serial(self.updating_info["last_serial"])
+                self.updating_info["cur_serial"] = int(time.time() * 1000)
+                if self.updating_info["last_serial"] == 0:
+                    updating_packages = self.get_all_packages()
+                else:
+                    updating_packages = self.changelog_since_serial(self.updating_info["last_serial"])
         else:
             print("continue last updating, loading updating info....")
             updating_packages = self.loading_updating_packages_from_files()
@@ -351,6 +363,8 @@ class NpmMirror:
                 self.updating_info["cur_serial"] = 0
                 self.updating_info["updating_names_file"] = []
                 self.updating_info["updating_names_count"] = 0
+                if os.path.exists(cur_dir + "fix"):
+                    os.remove(cur_dir + 'fix')
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except BaseException as ex:
