@@ -25,7 +25,8 @@ conf = {
     "hosted_domain": "mirrors.huaweicloud.com/repository/npm",
     "download_urls": [
         "https?://[^/]*/[^/]*/\-/.*\.tgz",
-    ]
+    ],
+    "options": "update"
 }
 
 
@@ -185,7 +186,7 @@ class NpmSyncPackages:
                     if random.randint(1, 2) == 2:
                         url = url.replace(conf["origin_domain"], conf["download_domain"])
                 if not Utils.is_file_exist(full_filename):
-                    data = Utils.get_url(url)
+                    data = Utils.get_url(url, timeout=240)
                     if data:
                         Utils.save_data_as_file(full_filename, data)
                         print("save file: %s" % full_filename)
@@ -289,8 +290,7 @@ class NpmMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            if os.path.exists(cur_dir + "fix"):
-                conf["options"] = "fix"
+            if conf["options"] == "fix":
                 print("begin getting fixing packages....")
                 updating_packages = self.get_all_packages()
                 self.updating_info["cur_serial"] = self.updating_info["last_serial"]
@@ -373,6 +373,8 @@ class NpmMirror:
 
 
 if __name__ == "__main__":
+    if os.path.exists(cur_dir + "fix"):
+        conf["options"] = "fix"
     Utils.create_dir(conf["package_path"])
     npm = NpmMirror()
     npm.run()

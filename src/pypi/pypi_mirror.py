@@ -26,7 +26,8 @@ conf = {
     "origin_domain": "pypi.python.org",
     # "download_domain": "mirrors.huaweicloud.com/repository/pypi",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
-    "rpc_use_proxy": False
+    "rpc_use_proxy": False,
+    "options": "update"
 }
 default_sockets = socket.socket
 socks.setdefaultproxy(socks.PROXY_TYPE_HTTP, "xxxx", 8080, True, "xxx", "xxx")
@@ -178,7 +179,7 @@ class PypiSyncPackages:
                 if "download_domain" in conf:
                     if random.randint(1, 2) == 2:
                         item["url"] = item["url"].replace(conf["origin_domain"], conf["download_domain"])
-                data = Utils.get_url(item["url"])
+                data = Utils.get_url(item["url"], timeout=240)
                 if data:
                     Utils.save_data_as_file(filename, data)
                     print("save file: %s" % filename)
@@ -234,14 +235,17 @@ class PypiMirror:
 
     def get_all_packages(self):
         filename = conf["simple_path"] + ".all"
-        self.set_proxy(True)
-        packages = self.client.list_packages()
-        self.set_proxy(False)
-        Utils.write_json_file(filename, packages)
+        if Utils.is_file_exist(filename):
+            return Utils.read_json_file(filename)
+        else:
+            self.set_proxy(True)
+            packages = self.client.list_packages()
+            self.set_proxy(False)
+            Utils.write_json_file(filename, packages)
 
-        index_data = Utils.get_url("https://pypi.python.org/simple/")
-        Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
-        return packages
+            index_data = Utils.get_url("https://pypi.python.org/simple/")
+            Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
+            return packages
 
     def save_updating_info(self):
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
@@ -276,8 +280,7 @@ class PypiMirror:
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
         if self.updating_info["cur_serial"] == 0:
-            if os.path.exists(cur_dir + "fix"):
-                conf["options"] = "fix"
+            if conf["options"] == "fix":
                 print("begin getting fixing packages....")
                 updating_packages = self.get_all_packages()
                 self.updating_info["cur_serial"] = self.updating_info["last_serial"]
@@ -377,6 +380,8 @@ class PypiMirror:
 
 
 if __name__ == "__main__":
+    if os.path.exists(cur_dir + "fix"):
+        conf["options"] = "fix"
     Utils.create_dir(conf["simple_path"])
     Utils.create_dir(conf["package_path"])
     pypi = PypiMirror()
