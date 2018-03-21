@@ -12,6 +12,8 @@ import re
 import sys
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
+from socket import error as SocketError
+import errno
 
 reload(sys)
 sys.setdefaultencoding("utf-8")
@@ -129,6 +131,14 @@ class Utils:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
                     return None
+            except SocketError as ex:
+                if times >= retry_times:
+                    if ex.errno == errno.ECONNRESET:
+                        print("[warning]====> url(%s): %s" % (url, ex.message))
+                        Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
+                        return None
+                    else:
+                        raise ex
             except BaseException as ex:
                 if times >= retry_times:
                     print("[error]====> url(%s): %s" % (url, ex.message))
@@ -208,7 +218,7 @@ class ComposerSyncPackages:
                     if "local_sha256" in package:
                         if name in local_metadata["packages"] and version in local_metadata["packages"][name]:
                             local_version_value = local_metadata["packages"][name][version]
-                            if "dist" in local_version_value:
+                            if "dist" in local_version_value and local_version_value["dist"]:
                                 value["dist"]["url"] = local_version_value["dist"]["url"]
                                 value["dist"]["shasum"] = local_version_value["dist"]["shasum"]
                                 continue

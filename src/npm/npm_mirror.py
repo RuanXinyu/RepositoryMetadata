@@ -12,6 +12,8 @@ import shutil
 import re
 import traceback
 from multiprocessing.dummy import Pool as ThreadPool
+from socket import error as SocketError
+import errno
 
 
 reload(sys)
@@ -119,6 +121,14 @@ class Utils:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
                     return None
+            except SocketError as ex:
+                if times >= retry_times:
+                    if ex.errno == errno.ECONNRESET:
+                        print("[warning]====> url(%s): %s" % (url, ex.message))
+                        Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
+                        return None
+                    else:
+                        raise ex
             except BaseException as ex:
                 if times >= retry_times:
                     print("[error]====> url(%s): %s" % (url, ex.message))
