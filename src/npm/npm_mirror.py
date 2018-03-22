@@ -22,9 +22,9 @@ cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
-    "origin_domain": "registry.npmjs.org",
-    # "download_domain": "cdn.npm.taobao.org",
-    "hosted_domain": "mirrors.huaweicloud.com/repository/npm",
+    "origin_domain": "http://registry.npmjs.org/",
+    # "download_domain": "https://cdn.npm.taobao.org/",
+    "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm/",
     "download_urls": [
         "https?://[^/]*/[^/]*/\-/.*\.tgz",
     ],
@@ -186,23 +186,23 @@ class NpmSyncPackages:
                     continue
 
                 url = version["dist"]["tarball"]
-                if not "".endswith(".tgz"):
+                if not url.endswith(".tgz"):
                     continue
                 index = url.find(conf["origin_domain"])
                 if index != -1:
-                    filename = url[index + 1 + len(conf["origin_domain"]):]
+                    filename = url[index + len(conf["origin_domain"]):]
                 else:
                     index = url.find(conf["hosted_domain"])
                     if index != -1:
-                        filename = url[index + 1 + len(conf["hosted_domain"]):]
+                        filename = url[index + len(conf["hosted_domain"]):]
                     else:
                         continue
-                    url = "http://%s/%s" % (conf["origin_domain"], filename)
+                    url = conf["origin_domain"] + filename
                 full_filename = conf["package_path"] + filename
 
                 if "download_domain" in conf:
                     if random.randint(1, 2) == 2:
-                        url = "https://%s/%s" % (conf["download_domain"], filename)
+                        url = conf["download_domain"] + filename
                 if not Utils.is_file_exist(full_filename):
                     data = Utils.get_url(url, timeout=240)
                     if data:
@@ -218,7 +218,7 @@ class NpmSyncPackages:
                         self.save_updating_info()
 
                 if Utils.is_file_exist(full_filename):
-                    version["dist"]["tarball"] = "https://%s/%s" % (conf["hosted_domain"], filename)
+                    version["dist"]["tarball"] = conf["hosted_domain"] + filename
 
         if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
             self.updating_info["updated_packages_count"] += 1
@@ -259,7 +259,7 @@ class NpmMirror:
 
     @staticmethod
     def get_all_packages():
-        filename = conf["package_path"] + ".all"
+        filename = conf["package_path"] + "-/all"
         print("get all docs from 'https://skimdb.npmjs.com/registry/_all_docs'")
         all_packages = Utils.get_url("https://skimdb.npmjs.com/registry/_all_docs", timeout=600)
         Utils.save_data_as_file(filename, all_packages)
