@@ -188,13 +188,16 @@ class NpmSyncPackages:
                 url = version["dist"]["tarball"]
                 if not url.endswith(".tgz"):
                     continue
-                index = url.find("://" + conf["origin_domain" + "/"])
+
+                match_domain = "://" + conf["origin_domain"] + "/"
+                index = url.find(match_domain)
                 if index != -1:
-                    filename = url[index + len(conf["origin_domain"]):]
+                    filename = url[index + len(match_domain):]
                 else:
-                    index = url.find(conf["hosted_domain"] + "/")
+                    match_domain = conf["hosted_domain"] + "/"
+                    index = url.find(match_domain)
                     if index != -1:
-                        filename = url[index + len(conf["hosted_domain"]):]
+                        filename = url[index + len(match_domain):]
                     else:
                         continue
                     url = "https://%s/%s" % (conf["origin_domain"], filename)
