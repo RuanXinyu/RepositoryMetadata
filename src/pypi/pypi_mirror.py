@@ -323,7 +323,7 @@ class PypiMirror:
             print("reload mirror info: %s" % self.updating_info)
 
         if len(updating_packages) == 0:
-            print("no need to update, exit ...")
+            print("[exit]====> no need to update, exit ...")
             self.updating_info["cur_serial"] = 0
             self.save_updating_info()
             exit(0)
@@ -387,9 +387,12 @@ class PypiMirror:
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
+        except SystemExit:
+            pass
 
 
 if __name__ == "__main__":
+    print("\n\n\n==============[start]===============\n\n")
     if os.path.exists(cur_dir + "fix"):
         conf["options"] = "fix"
     Utils.create_dir(conf["simple_path"])

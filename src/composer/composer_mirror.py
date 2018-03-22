@@ -471,7 +471,7 @@ class ComposerMirror:
             self.print_updating_info()
 
         if len(updating_packages) == 0:
-            print("no need to update, exit ...")
+            print("[exit]====> no need to update, exit ...")
             self.updating_info["cur_serial"] = 0
             self.save_updating_info()
             exit(0)
@@ -534,6 +534,8 @@ class ComposerMirror:
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
+        except SystemExit:
+            pass
 
     @staticmethod
     def find_package(package_name):
@@ -571,6 +573,7 @@ class ComposerMirror:
 
 
 if __name__ == "__main__":
+    print("\n\n\n==============[start]===============\n\n")
     if len(sys.argv) == 3 and sys.argv[1] == "find":
         ComposerMirror.find_package(sys.argv[2])
     elif len(sys.argv) == 2 and sys.argv[1] == "check_metadata":

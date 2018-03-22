@@ -186,8 +186,8 @@ class NpmSyncPackages:
                     continue
 
                 url = version["dist"]["tarball"]
-                # if not self.is_match_download_urls(url):
-                #     continue
+                if not "".endswith(".tgz"):
+                    continue
                 index = url.find(conf["origin_domain"])
                 if index != -1:
                     filename = url[index + 1 + len(conf["origin_domain"]):]
@@ -196,7 +196,8 @@ class NpmSyncPackages:
                     if index != -1:
                         filename = url[index + 1 + len(conf["hosted_domain"]):]
                     else:
-                        raise BaseException("found unkown download url: %s" % url)
+                        continue
+                    url = "http://%s/%s" % (conf["origin_domain"], filename)
                 full_filename = conf["package_path"] + filename
 
                 if "download_domain" in conf:
@@ -323,7 +324,7 @@ class NpmMirror:
             print("reload mirror info: %s" % self.updating_info)
 
         if len(updating_packages) == 0:
-            print("no need to update, exit ...")
+            print("[exit]====> no need to update, exit ...")
             self.updating_info["cur_serial"] = 0
             self.save_updating_info()
             exit(0)
@@ -387,9 +388,12 @@ class NpmMirror:
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
+        except SystemExit:
+            pass
 
 
 if __name__ == "__main__":
+    print("\n\n\n==============[start]===============\n\n")
     if os.path.exists(cur_dir + "fix"):
         conf["options"] = "fix"
     Utils.create_dir(conf["package_path"])
