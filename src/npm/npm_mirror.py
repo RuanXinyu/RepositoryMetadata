@@ -186,15 +186,22 @@ class NpmSyncPackages:
                     continue
 
                 url = version["dist"]["tarball"]
-                if not self.is_match_download_urls(url):
-                    continue
+                # if not self.is_match_download_urls(url):
+                #     continue
                 index = url.find(conf["origin_domain"])
-                filename = url[index + 1 + len(conf["origin_domain"]):]
+                if index != -1:
+                    filename = url[index + 1 + len(conf["origin_domain"]):]
+                else:
+                    index = url.find(conf["hosted_domain"])
+                    if index != -1:
+                        filename = url[index + 1 + len(conf["hosted_domain"]):]
+                    else:
+                        raise BaseException("found unkown download url: %s" % url)
                 full_filename = conf["package_path"] + filename
 
                 if "download_domain" in conf:
                     if random.randint(1, 2) == 2:
-                        url = url.replace(conf["origin_domain"], conf["download_domain"])
+                        url = "https://%s/%s" % (conf["download_domain"], filename)
                 if not Utils.is_file_exist(full_filename):
                     data = Utils.get_url(url, timeout=240)
                     if data:
@@ -210,7 +217,7 @@ class NpmSyncPackages:
                         self.save_updating_info()
 
                 if Utils.is_file_exist(full_filename):
-                    version["dist"]["tarball"] = "https://" + conf["hosted_domain"] + "/" + filename
+                    version["dist"]["tarball"] = "https://%s/%s" % (conf["hosted_domain"], filename)
 
         if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
             self.updating_info["updated_packages_count"] += 1
