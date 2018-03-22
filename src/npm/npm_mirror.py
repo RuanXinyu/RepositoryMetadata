@@ -22,9 +22,9 @@ cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
-    "origin_domain": "registry.npmjs.org/",
+    "origin_domain": "registry.npmjs.org",
     # "download_domain": "https://cdn.npm.taobao.org/",
-    "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm/",
+    "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm",
     "download_urls": [
         "https?://[^/]*/[^/]*/\-/.*\.tgz",
     ],
@@ -188,16 +188,16 @@ class NpmSyncPackages:
                 url = version["dist"]["tarball"]
                 if not url.endswith(".tgz"):
                     continue
-                index = url.find("://" + conf["origin_domain"])
+                index = url.find("://" + conf["origin_domain" + "/"])
                 if index != -1:
                     filename = url[index + len(conf["origin_domain"]):]
                 else:
-                    index = url.find(conf["hosted_domain"])
+                    index = url.find(conf["hosted_domain"] + "/")
                     if index != -1:
                         filename = url[index + len(conf["hosted_domain"]):]
                     else:
                         continue
-                    url = "https://" + conf["origin_domain"] + filename
+                    url = "https://%s/%s" % (conf["origin_domain"], filename)
                 full_filename = conf["package_path"] + filename
 
                 if "download_domain" in conf:
@@ -218,7 +218,7 @@ class NpmSyncPackages:
                         self.save_updating_info()
 
                 if Utils.is_file_exist(full_filename):
-                    version["dist"]["tarball"] = conf["hosted_domain"] + filename
+                    version["dist"]["tarball"] = conf["hosted_domain"] + "/" + filename
 
         if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
             self.updating_info["updated_packages_count"] += 1
