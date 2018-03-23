@@ -100,7 +100,7 @@ class Utils:
         d = datetime.datetime.strptime(date_str, date_format)
         t = d.timetuple()
         timestamp = int(time.mktime(t))
-        return timestamp * 1000 + d.microsecond / 1000
+        return timestamp * 1000 + d.microsecond / 1000 % 1000
 
     @staticmethod
     def get_url(url, timeout=120, retry_times=2, ignore_codes=(400, 404, )):
@@ -384,15 +384,15 @@ class PypiMirror:
                     os.remove(cur_dir + 'fix')
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
+        except SystemExit:
+            pass
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
-        except SystemExit:
-            pass
 
 
 if __name__ == "__main__":
-    print("\n\n\n==============[start]===============\n\n")
+    print("\n\n\n==============[start]: %s===============\n\n" % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
     if os.path.exists(cur_dir + "fix"):
         conf["options"] = "fix"
     Utils.create_dir(conf["simple_path"])

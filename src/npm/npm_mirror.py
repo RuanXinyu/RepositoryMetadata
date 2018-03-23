@@ -97,10 +97,10 @@ class Utils:
         d = datetime.datetime.strptime(date_str, date_format)
         t = d.timetuple()
         timestamp = int(time.mktime(t))
-        return timestamp * 1000 + d.microsecond / 1000
+        return timestamp * 1000 + d.microsecond / 1000 * 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=2, ignore_codes=(403, 404, 500, 504)):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(403, 404)):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -121,14 +121,14 @@ class Utils:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
                     return None
-            except SocketError as ex:
-                if times >= retry_times:
-                    if ex.errno == errno.ECONNRESET:
-                        print("[warning]====> url(%s): %s" % (url, ex.message))
-                        Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
-                        return None
-                    else:
-                        raise ex
+            # except SocketError as ex:
+            #     if times >= retry_times:
+            #         if ex.errno == errno.ECONNRESET:
+            #             print("[warning]====> url(%s): %s" % (url, ex.message))
+            #             Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
+            #             return None
+            #         else:
+            #             raise ex
             except BaseException as ex:
                 if times >= retry_times:
                     print("[error]====> url(%s): %s" % (url, ex.message))
@@ -215,8 +215,8 @@ class NpmSyncPackages:
                         if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
                             print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                             os.remove(full_filename)
-                            Utils.write_file(cur_dir + "bad_sha1.error", url + "\n", mode="a")
-                            # raise BaseException("[error]====> sha1 error")
+                            # Utils.write_file(cur_dir + "bad_sha1.error", url + "\n", mode="a")
+                            raise BaseException("[error]====> sha1 error")
                         self.updating_info["updated_file_count"] += 1
                         self.save_updating_info()
 
@@ -257,8 +257,8 @@ class NpmMirror:
 
     @staticmethod
     def get_total_doc_count():
-        info = Utils.get_url("https://skimdb.npmjs.com/registry")
-        return json.loads(info)["doc_count"]
+        info = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?limit=1")
+        return json.loads(info)["total_rows"]
 
     @staticmethod
     def get_all_packages():
@@ -273,8 +273,8 @@ class NpmMirror:
         total_count = self.get_total_doc_count()
         print("total count = %d" % total_count)
         updating_packages = []
-        for count in range(5000, total_count, 5000):
-            json_str = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?skip=%d" % (total_count - count))
+        for count in range(500, total_count, 500):
+            json_str = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?skip=%d&limit=501" % (total_count - count))
             rows = json.loads(json_str)["rows"]
             if Utils.to_timestamp(rows[0]["key"]) >= serial:
                 updating_packages += [row["id"] for row in rows]
@@ -283,6 +283,7 @@ class NpmMirror:
                     if Utils.to_timestamp(rows[index]["key"]) >= serial:
                         updating_packages += [row["id"] for row in rows[index:]]
                         return updating_packages
+                return updating_packages
         return updating_packages
 
     def save_updating_info(self):
@@ -316,11 +317,12 @@ class NpmMirror:
                 updating_packages = self.get_all_packages()
                 self.updating_info["cur_serial"] = self.updating_info["last_serial"]
             else:
-                self.updating_info["cur_serial"] = int(time.time() * 1000)
+                self.updating_info["cur_serial"] = Utils.to_timestamp(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
                 if self.updating_info["last_serial"] == 0:
                     updating_packages = self.get_all_packages()
                 else:
-                    updating_packages = self.changelog_since_serial(self.updating_info["last_serial"])
+                    names_list = self.changelog_since_serial(self.updating_info["last_serial"])
+                    updating_packages = list(set(names_list))
         else:
             print("continue last updating, loading updating info....")
             updating_packages = self.loading_updating_packages_from_files()
@@ -388,15 +390,15 @@ class NpmMirror:
                     os.remove(cur_dir + 'fix')
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
+        except SystemExit:
+            pass
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
-        except SystemExit:
-            pass
 
 
 if __name__ == "__main__":
-    print("\n\n\n==============[start]===============\n\n")
+    print("\n\n\n==============[start]: %s===============\n\n" % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
     if os.path.exists(cur_dir + "fix"):
         conf["options"] = "fix"
     Utils.create_dir(conf["package_path"])

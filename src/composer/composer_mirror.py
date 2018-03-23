@@ -107,7 +107,7 @@ class Utils:
         d = datetime.datetime.strptime(date_str, date_format)
         t = d.timetuple()
         timestamp = int(time.mktime(t))
-        return timestamp * 1000 + d.microsecond / 1000
+        return timestamp * 1000 + d.microsecond / 1000 % 1000
 
     @staticmethod
     def get_url(url, timeout=120, retry_times=2, ignore_codes=(404, 401, 403, 410, 451, 502)):
@@ -531,11 +531,11 @@ class ComposerMirror:
                 self.updating_info["updating_names_file"] = []
                 self.updating_info["updating_names_count"] = 0
                 self.save_updating_info()
+        except SystemExit:
+            pass
         except BaseException as ex:
             print("[main exit]==============> %s" % ex.message)
             traceback.print_exc()
-        except SystemExit:
-            pass
 
     @staticmethod
     def find_package(package_name):
@@ -573,7 +573,7 @@ class ComposerMirror:
 
 
 if __name__ == "__main__":
-    print("\n\n\n==============[start]===============\n\n")
+    print("\n\n\n==============[start]: %s===============\n\n" % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
     if len(sys.argv) == 3 and sys.argv[1] == "find":
         ComposerMirror.find_package(sys.argv[2])
     elif len(sys.argv) == 2 and sys.argv[1] == "check_metadata":
