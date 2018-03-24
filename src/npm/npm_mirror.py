@@ -96,7 +96,7 @@ class Utils:
         return timestamp * 1000 + d.microsecond / 1000 * 1000
 
     @staticmethod
-    def get_url(url, timeout=120, retry_times=2, ignore_codes=(403, 404)):
+    def get_url(url, timeout=120, retry_times=2, ignore_codes=(401, 403, 404)):
         times = 0
         print("get url: %s" % url)
         while times < retry_times:
@@ -117,14 +117,14 @@ class Utils:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
                     return None
-            # except SocketError as ex:
-            #     if times >= retry_times:
-            #         if ex.errno == errno.ECONNRESET:
-            #             print("[warning]====> url(%s): %s" % (url, ex.message))
-            #             Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
-            #             return None
-            #         else:
-            #             raise ex
+            except SocketError as ex:
+                if times >= retry_times:
+                    if ex.errno == errno.ECONNRESET:
+                        print("[warning]====> url(%s): %s" % (url, ex.message))
+                        Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
+                        return None
+                    else:
+                        raise ex
             except BaseException as ex:
                 if times >= retry_times:
                     print("[error]====> url(%s): %s" % (url, ex.message))
