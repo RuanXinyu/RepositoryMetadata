@@ -26,7 +26,6 @@ conf = {
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
     "package_path": "D:\\mirrors\\repository\\pypi\\packages\\",
     "origin_domain": "pypi.python.org",
-    # "download_domain": "mirrors.huaweicloud.com/repository/pypi",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
     "rpc_use_proxy": False,
     "options": "update"
@@ -186,9 +185,6 @@ class PypiSyncPackages:
                 if Utils.is_file_exist(filename):
                     continue
 
-                if "download_domain" in conf:
-                    if random.randint(1, 2) == 2:
-                        item["url"] = item["url"].replace(conf["origin_domain"], conf["download_domain"])
                 data = Utils.get_url(item["url"], timeout=240)
                 if data:
                     Utils.save_data_as_file(filename, data)
@@ -343,7 +339,7 @@ class PypiMirror:
         else:
             step = total_count / self.thread_count
 
-        serial_dir = self.cur_dir + str(self.updating_info["last_serial"])
+        serial_dir = self.cur_dir + "thread_data"
         if os.path.exists(serial_dir + "_back"):
             shutil.rmtree(serial_dir + "_back")
         if os.path.exists(serial_dir):

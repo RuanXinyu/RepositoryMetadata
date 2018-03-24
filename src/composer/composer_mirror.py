@@ -492,7 +492,7 @@ class ComposerMirror:
         else:
             step = total_count / self.thread_count
 
-        serial_dir = self.cur_dir + str(self.updating_info["last_serial"])
+        serial_dir = self.cur_dir + "thread_data"
         if os.path.exists(serial_dir + "_back"):
             shutil.rmtree(serial_dir + "_back")
         if os.path.exists(serial_dir):

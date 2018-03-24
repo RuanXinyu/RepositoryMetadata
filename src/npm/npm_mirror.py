@@ -23,11 +23,7 @@ exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
     "origin_domain": "registry.npmjs.org",
-    # "download_domain": "https://cdn.npm.taobao.org/",
     "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm",
-    "download_urls": [
-        "https?://[^/]*/[^/]*/\-/.*\.tgz",
-    ],
     "options": "update"
 }
 
@@ -153,14 +149,6 @@ class NpmSyncPackages:
         Utils.write_json_file(self.packages_info_file, self.updating_info)
 
     @staticmethod
-    def is_match_download_urls(url):
-        for item in conf["download_urls"]:
-            if re.match(item, url):
-                return True
-        Utils.write_file(cur_dir + "unkown_download_url.txt", url + "\n", mode="a")
-        return False
-
-    @staticmethod
     def check_exit_flag():
         lock_file = cur_dir + "exit"
         if os.path.exists(lock_file):
@@ -173,7 +161,7 @@ class NpmSyncPackages:
         if conf["options"] == "fix" and Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
             metadata = Utils.read_json_file(conf["package_path"] + package + "/index.json")
         else:
-            metadata_str = Utils.get_url("https://skimdb.npmjs.com/registry/%s" % package)
+            metadata_str = Utils.get_url("https://replicate.npmjs.com/%s" % package.replace("/", "%2f"))
             if metadata_str:
                 metadata = json.loads(metadata_str)
             else:
@@ -203,9 +191,6 @@ class NpmSyncPackages:
                     url = "https://%s/%s" % (conf["origin_domain"], filename)
                 full_filename = conf["package_path"] + filename
 
-                if "download_domain" in conf:
-                    if random.randint(1, 2) == 2:
-                        url = conf["download_domain"] + filename
                 if not Utils.is_file_exist(full_filename):
                     data = Utils.get_url(url, timeout=240)
                     if data:
@@ -257,14 +242,14 @@ class NpmMirror:
 
     @staticmethod
     def get_total_doc_count():
-        info = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?limit=1")
+        info = Utils.get_url("https://replicate.npmjs.com/_design/app/_view/updated?limit=1")
         return json.loads(info)["total_rows"]
 
     @staticmethod
     def get_all_packages():
         filename = conf["package_path"] + "-/all"
-        print("get all docs from 'https://skimdb.npmjs.com/registry/_all_docs'")
-        all_packages = Utils.get_url("https://skimdb.npmjs.com/registry/_all_docs", timeout=600)
+        print("get all docs from 'https://replicate.npmjs.com/_all_docs'")
+        all_packages = Utils.get_url("https://replicate.npmjs.com/_all_docs", timeout=600)
         Utils.save_data_as_file(filename, all_packages)
         all_packages = json.loads(all_packages)
         return [item["id"] for item in all_packages["rows"]]
@@ -274,7 +259,7 @@ class NpmMirror:
         print("total count = %d" % total_count)
         updating_packages = []
         for count in range(500, total_count, 500):
-            json_str = Utils.get_url("https://skimdb.npmjs.com/registry/_design/app/_view/updated?skip=%d&limit=501" % (total_count - count))
+            json_str = Utils.get_url("https://replicate.npmjs.com/_design/app/_view/updated?skip=%d&limit=501" % (total_count - count))
             rows = json.loads(json_str)["rows"]
             if Utils.to_timestamp(rows[0]["key"]) >= serial:
                 updating_packages += [row["id"] for row in rows]
@@ -349,7 +334,7 @@ class NpmMirror:
         else:
             step = total_count / self.thread_count
 
-        serial_dir = self.cur_dir + str(self.updating_info["last_serial"])
+        serial_dir = self.cur_dir + "thread_data"
         if os.path.exists(serial_dir + "_back"):
             shutil.rmtree(serial_dir + "_back")
         if os.path.exists(serial_dir):
