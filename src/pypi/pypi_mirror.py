@@ -13,6 +13,7 @@ import shutil
 import socket
 import socks
 import traceback
+import re
 from multiprocessing.dummy import Pool as ThreadPool
 from socket import error as SocketError
 import errno
@@ -200,7 +201,7 @@ class PypiSyncPackages:
         if not use_local_metadata or not Utils.is_file_exist(package_path + "json"):
             index_data = Utils.get_url("https://pypi.python.org/simple/%s/" % package)
             package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
-            Utils.save_data_as_file(package_path + "index.html", index_data)
+            Utils.save_data_as_file(package_path + "index.html", re.sub("https?://files\.pythonhosted\.org/", "../../", index_data))
             if not Utils.is_file_exist(package_path + "json"):
                 self.updating_info["updated_packages_count"] += 1
             Utils.save_data_as_file(package_path + "json", json.dumps(metadata))

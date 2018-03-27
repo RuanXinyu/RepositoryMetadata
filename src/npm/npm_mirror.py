@@ -261,6 +261,8 @@ class NpmMirror:
         for count in range(500, total_count, 500):
             json_str = Utils.get_url("https://replicate.npmjs.com/_design/app/_view/updated?skip=%d&limit=501" % (total_count - count))
             rows = json.loads(json_str)["rows"]
+            if count == 500:
+                self.updating_info["cur_serial"] = Utils.to_timestamp(rows[-1]["key"])
             if Utils.to_timestamp(rows[0]["key"]) >= serial:
                 updating_packages += [row["id"] for row in rows]
             else:
@@ -302,8 +304,8 @@ class NpmMirror:
                 updating_packages = self.get_all_packages()
                 self.updating_info["cur_serial"] = self.updating_info["last_serial"]
             else:
-                self.updating_info["cur_serial"] = Utils.to_timestamp(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
                 if self.updating_info["last_serial"] == 0:
+                    self.updating_info["cur_serial"] = Utils.to_timestamp(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
                     updating_packages = self.get_all_packages()
                 else:
                     names_list = self.changelog_since_serial(self.updating_info["last_serial"])
