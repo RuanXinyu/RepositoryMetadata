@@ -8,6 +8,7 @@ import xmlrpclib
 import sys
 import datetime
 import urllib2
+import urlparse
 import httplib
 import shutil
 import socket
@@ -26,7 +27,7 @@ exit_flag = False
 conf = {
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
     "package_path": "D:\\mirrors\\repository\\pypi\\packages\\",
-    "origin_domain": "pypi.python.org",
+    "origin_domain": "pypi.org",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
     "rpc_use_proxy": False,
     "options": "update"
@@ -171,7 +172,7 @@ class PypiSyncPackages:
             metadata = Utils.read_json_file(package_path + "json")
             use_local_metadata = True
         else:
-            metadata = Utils.get_url("https://pypi.python.org/pypi/%s/json" % package)
+            metadata = Utils.get_url("https://pypi.org/pypi/%s/json" % package)
             if metadata:
                 metadata = json.loads(metadata)
             else:
@@ -182,6 +183,13 @@ class PypiSyncPackages:
         for version in metadata["releases"].values():
             for item in version:
                 self.check_exit_flag()
+                if "path" not in item :
+                    item["path"] = urlparse.urlsplit(item["url"])[2]
+                    if item["path"].startswith("/packages/"):
+                        item["path"] = item["path"][len("/packages/"):]
+                    else:
+                        raise BaseException("[error]====> path error, %s" % item["url"])
+
                 filename = conf["package_path"] + item["path"]
                 if Utils.is_file_exist(filename):
                     continue
@@ -199,7 +207,7 @@ class PypiSyncPackages:
                     self.save_updating_info()
 
         if not use_local_metadata or not Utils.is_file_exist(package_path + "json"):
-            index_data = Utils.get_url("https://pypi.python.org/simple/%s/" % package)
+            index_data = Utils.get_url("https://pypi.org/simple/%s/" % package)
             package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
             Utils.save_data_as_file(package_path + "index.html", re.sub("https?://files\.pythonhosted\.org/", "../../", index_data))
             if not Utils.is_file_exist(package_path + "json"):
@@ -229,7 +237,7 @@ class PypiSyncPackages:
 
 class PypiMirror:
     def __init__(self, thread_count=25):
-        self.client = xmlrpclib.ServerProxy('https://pypi.python.org/pypi')
+        self.client = xmlrpclib.ServerProxy('https://pypi.org/pypi')
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
@@ -250,7 +258,8 @@ class PypiMirror:
             self.set_proxy(False)
             Utils.write_json_file(filename, packages)
 
-            index_data = Utils.get_url("https://pypi.python.org/simple/")
+            index_data = Utils.get_url("https://pypi.org/simple/")
+            index_data = re.sub("/simple/", "", index_data)
             Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
             return packages
 
