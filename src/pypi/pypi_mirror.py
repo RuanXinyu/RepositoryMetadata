@@ -25,8 +25,8 @@ sys.setdefaultencoding("utf-8")
 cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
+    "store_path": "D:\\mirrors\\repository\\pypi\\",
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
-    "package_path": "D:\\mirrors\\repository\\pypi\\packages\\",
     "origin_domain": "pypi.org",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
     "rpc_use_proxy": False,
@@ -166,53 +166,41 @@ class PypiSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
-        use_local_metadata = False
-        if conf["options"] == "fix" and Utils.is_file_exist(package_path + "json"):
-            metadata = Utils.read_json_file(package_path + "json")
-            use_local_metadata = True
-        else:
-            metadata = Utils.get_url("https://pypi.org/pypi/%s/json" % package)
-            if metadata:
-                metadata = json.loads(metadata)
-            else:
-                return
+        index_data = Utils.get_url("https://pypi.org/simple/%s/" % package)
+        urls = re.findall('href="([^"]*)"', index_data)
+        for url in urls:
+            url_prefix = "https://files.pythonhosted.org/packages/"
+            if not url.startswith(url_prefix):
+                raise BaseException("[error]====> download url is not match: %s " % url)
 
-        if "releases" not in metadata:
-            return
-        for version in metadata["releases"].values():
-            for item in version:
-                self.check_exit_flag()
-                if "path" not in item :
-                    item["path"] = urlparse.urlsplit(item["url"])[2]
-                    if item["path"].startswith("/packages/"):
-                        item["path"] = item["path"][len("/packages/"):]
-                    else:
-                        raise BaseException("[error]====> path error, %s" % item["url"])
+            url_data = urlparse.urlsplit(url)
+            filename = conf["store_path"] + url_data[2]
+            if Utils.is_file_exist(filename):
+                continue
+            if not url_data[4] or not url_data[4].startswith("sha256="):
+                raise BaseException("[error]====> no sha256 value is found in url: %s " % url)
+            sha256 = url_data[4][len("sha256="):]
 
-                filename = conf["package_path"] + item["path"]
-                if Utils.is_file_exist(filename):
-                    continue
+            data = Utils.get_url(url, timeout=240)
+            if data:
+                Utils.save_data_as_file(filename, data)
+                print("save file: %s" % filename)
+                local_sha256 = Utils.hash("sha256", data)
+                if sha256 != local_sha256:
+                    print("sha256 error: %s, remote: %s, local: %s" % (filename, sha256, local_sha256))
+                    os.remove(filename)
+                    raise BaseException("[error]====> sha256 error")
+                self.updating_info["updated_file_count"] += 1
+                self.save_updating_info()
 
-                data = Utils.get_url(item["url"], timeout=240)
-                if data:
-                    Utils.save_data_as_file(filename, data)
-                    print("save file: %s" % filename)
-                    local_md5 = Utils.hash("md5", data)
-                    if item["md5_digest"] != local_md5:
-                        print("md5 error: %s, remote: %s, local: %s" % (filename, item["md5_digest"], local_md5))
-                        os.remove(filename)
-                        raise BaseException("[error]====> md5 error")
-                    self.updating_info["updated_file_count"] += 1
-                    self.save_updating_info()
-
-        if not use_local_metadata or not Utils.is_file_exist(package_path + "json"):
-            index_data = Utils.get_url("https://pypi.org/simple/%s/" % package)
-            package_path = conf["simple_path"] + package.lower().replace("_", "-").replace(".", "-") + os.path.sep
-            Utils.save_data_as_file(package_path + "index.html", re.sub("https?://files\.pythonhosted\.org/", "../../", index_data))
-            if not Utils.is_file_exist(package_path + "json"):
-                self.updating_info["updated_packages_count"] += 1
-            Utils.save_data_as_file(package_path + "json", json.dumps(metadata))
+        package = re.sub(r"[-_.]+", "-", package).lower()
+        package_path = conf["simple_path"] + package + os.path.sep
+        if not Utils.is_file_exist(package_path + "json"):
+            self.updating_info["updated_packages_count"] += 1
+        metadata = Utils.get_url("https://pypi.org/pypi/%s/json" % package)
+        if metadata:
+            Utils.save_data_as_file(package_path + "json", metadata)
+        Utils.save_data_as_file(package_path + "index.html", index_data.replace("https://files.pythonhosted.org/", "../../"))
 
     def run(self):
         time.sleep(random.randint(1, 10))
@@ -241,7 +229,7 @@ class PypiMirror:
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
-        self.updating_info = {"last_serial": 0, "cur_serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
+        self.updating_info = {"serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     @staticmethod
     def set_proxy(set=True):
@@ -259,7 +247,7 @@ class PypiMirror:
             Utils.write_json_file(filename, packages)
 
             index_data = Utils.get_url("https://pypi.org/simple/")
-            index_data = re.sub("/simple/", "", index_data)
+            index_data = re.sub("/simple/", "/repository/pypi/simple/", index_data)
             Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
             return packages
 
@@ -293,45 +281,38 @@ class PypiMirror:
             self.save_updating_info()
         else:
             self.updating_info = Utils.read_json_file(self.updating_info_filename)
-        print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
-        if self.updating_info["cur_serial"] == 0:
-            if conf["options"] == "fix":
-                print("begin getting fixing packages....")
-                updating_packages = self.get_all_packages()
-                self.updating_info["cur_serial"] = self.updating_info["last_serial"]
-            else:
-                print("get last_serial ...")
-                self.set_proxy(True)
-                self.updating_info["cur_serial"] = self.client.changelog_last_serial()
-                self.set_proxy(False)
-                if self.updating_info["last_serial"] == self.updating_info["cur_serial"]:
-                    updating_packages = []
-                elif self.updating_info["last_serial"] == 0:
-                    print("====> get all packages ....")
-                    updating_packages = self.get_all_packages()
-                else:
-                    print("====> get changelog_since_serial %d ...." % self.updating_info["last_serial"])
-                    self.set_proxy(True)
-                    data = self.client.changelog_since_serial(self.updating_info["last_serial"])
-                    self.set_proxy(False)
-                    names_list = [item[0] for item in data]
-                    updating_packages = list(set(names_list))
-
-                    # if has new package, re-get all packages
-                    all_packages = self.get_all_packages()
-                    if self.has_new_packages(updating_packages, all_packages):
-                        os.remove(conf["simple_path"] + ".all")
-                        self.get_all_packages()
+        print("get last_serial ...")
+        self.set_proxy(True)
+        cur_serial = self.client.changelog_last_serial()
+        self.set_proxy(False)
+        if self.updating_info["serial"] == cur_serial:
+            updating_packages = []
+        elif self.updating_info["serial"] == 0:
+            print("====> get all packages ....")
+            updating_packages = self.get_all_packages()
         else:
-            print("continue last updating, loading updating info....")
-            updating_packages = self.loading_updating_packages_from_files()
-            print("reload mirror info: %s" % self.updating_info)
+            print("====> get changelog_since_serial %d ...." % self.updating_info["serial"])
+            self.set_proxy(True)
+            data = self.client.changelog_since_serial(self.updating_info["serial"])
+            self.set_proxy(False)
+            print(json.dumps(data, indent=2))
+            names_list = [item[0] for item in data]
+            updating_packages = list(set(names_list))
+
+            # if has new package, re-get all packages
+            all_packages = self.get_all_packages()
+            if self.has_new_packages(updating_packages, all_packages):
+                os.remove(conf["simple_path"] + ".all")
+                self.get_all_packages()
+        self.updating_info["serial"] = cur_serial
+
+        print("loading last updating info....")
+        updating_packages += self.loading_updating_packages_from_files()
+        print("mirror info: %s" % self.updating_info)
 
         if len(updating_packages) == 0:
             print("[exit]====> no need to update, exit ...")
-            self.updating_info["cur_serial"] = 0
-            self.save_updating_info()
             exit(0)
 
         print("=====> split updating %d packages into %s directory ...." % (len(updating_packages), self.updating_info["last_serial"]))
@@ -382,12 +363,8 @@ class PypiMirror:
                 for item in result:
                     self.updating_info["updated_packages_count"] += item["updated_packages_count"]
                     self.updating_info["updated_file_count"] += item["updated_file_count"]
-                self.updating_info["last_serial"] = self.updating_info["cur_serial"]
-                self.updating_info["cur_serial"] = 0
                 self.updating_info["updating_names_file"] = []
                 self.updating_info["updating_names_count"] = 0
-                if os.path.exists(cur_dir + "fix"):
-                    os.remove(cur_dir + 'fix')
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except SystemExit:
@@ -399,9 +376,6 @@ class PypiMirror:
 
 if __name__ == "__main__":
     print("\n\n\n==============[start]: %s===============\n\n" % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
-    if os.path.exists(cur_dir + "fix"):
-        conf["options"] = "fix"
     Utils.create_dir(conf["simple_path"])
-    Utils.create_dir(conf["package_path"])
     pypi = PypiMirror()
     pypi.run()
