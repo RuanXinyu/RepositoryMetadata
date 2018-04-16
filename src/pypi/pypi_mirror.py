@@ -167,8 +167,11 @@ class PypiSyncPackages:
 
     def save_package(self, package):
         index_data = Utils.get_url("https://pypi.org/simple/%s/" % package)
+        if not index_data:
+            return
         urls = re.findall('href="([^"]*)"', index_data)
         for url in urls:
+            self.check_exit_flag()
             url_prefix = "https://files.pythonhosted.org/packages/"
             if not url.startswith(url_prefix):
                 raise BaseException("[error]====> download url is not match: %s " % url)
@@ -305,7 +308,6 @@ class PypiMirror:
             if self.has_new_packages(updating_packages, all_packages):
                 os.remove(conf["simple_path"] + ".all")
                 self.get_all_packages()
-        self.updating_info["serial"] = cur_serial
 
         print("loading last updating info....")
         updating_packages += self.loading_updating_packages_from_files()
@@ -315,9 +317,10 @@ class PypiMirror:
             print("[exit]====> no need to update, exit ...")
             exit(0)
 
-        print("=====> split updating %d packages into %s directory ...." % (len(updating_packages), self.updating_info["last_serial"]))
+        print("=====> split updating %d packages into directory ...." % (len(updating_packages)))
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
         self.updating_info["updating_names_count"] = len(updating_packages)
+        self.updating_info["serial"] = cur_serial
         self.save_updating_info()
 
     def split_packages(self, updating_packages):
