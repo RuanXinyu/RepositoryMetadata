@@ -110,27 +110,30 @@ class Utils:
         while times < retry_times:
             times += 1
             try:
-                data = urllib2.urlopen(url, timeout=timeout).read()
-                return data
+                request = urllib2.urlopen(url, timeout=timeout)
+                request_info = request.info()
+                data = request.read()
+                x_pypi_last_serial = int(request_info["x-pypi-last-serial"]) if "x-pypi-last-serial" in request_info else 0
+                return data, x_pypi_last_serial
             except (urllib2.URLError, httplib.HTTPException, httplib.IncompleteRead) as ex:
                 if times >= retry_times:
                     if hasattr(ex, 'code') and ex.code in ignore_codes:
                         print("[warning]====> url(%s), code(%d): %s" % (url, ex.code, ex.reason))
                         Utils.write_file(cur_dir + str(ex.code) + ".error", url + "\n", mode="a")
-                        return None
+                        return None, 0
                     print("[error]====> url(%s): %s" % (url, ex.message))
                     raise ex
             except httplib.BadStatusLine as ex:
                 if times >= retry_times:
                     print("[warning]====> url(%s): %s" % (url, ex.message))
                     Utils.write_file(cur_dir + "bad_status_line.error", url + "\n", mode="a")
-                    return None
+                    return None, 0
             # except SocketError as ex:
             #     if times >= retry_times:
             #         if ex.errno == errno.ECONNRESET:
             #             print("[warning]====> url(%s): %s" % (url, ex.message))
             #             Utils.write_file(cur_dir + "connect_reset.error", url + "\n", mode="a")
-            #             return None
+            #             return None, 0
             #         else:
             #             raise ex
             except BaseException as ex:
@@ -144,7 +147,7 @@ class PypiSyncPackages:
     def __init__(self, packages_filename):
         self.packages_file = packages_filename
         self.packages_info_file = packages_filename + ".info"
-        self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0}
+        self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0, "retry_packages":[]}
 
     def load_packages(self):
         if not Utils.is_file_exist(self.packages_info_file):
@@ -166,9 +169,13 @@ class PypiSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        index_data = Utils.get_url("https://pypi.org/simple/%s/" % package)
+        index_data, serial = Utils.get_url("https://pypi.org/simple/%s/" % package["name"])
         if not index_data:
             return
+        if serial != 0 and serial < package["serial"]:
+            self.updating_info["retry_packages"].append(package)
+            return
+
         urls = re.findall('href="([^"]*)"', index_data)
         for url in urls:
             self.check_exit_flag()
@@ -196,11 +203,14 @@ class PypiSyncPackages:
                 self.updating_info["updated_file_count"] += 1
                 self.save_updating_info()
 
-        package = re.sub(r"[-_.]+", "-", package).lower()
-        package_path = conf["simple_path"] + package + os.path.sep
+        package_name = re.sub(r"[-_.]+", "-", package["name"]).lower()
+        package_path = conf["simple_path"] + package_name + os.path.sep
         if not Utils.is_file_exist(package_path + "json"):
             self.updating_info["updated_packages_count"] += 1
-        metadata = Utils.get_url("https://pypi.org/pypi/%s/json" % package)
+        metadata, serial = Utils.get_url("https://pypi.org/pypi/%s/json" % package["name"])
+        if serial != 0 and serial < package["serial"]:
+            self.updating_info["retry_packages"].append(package)
+            return
         if metadata:
             Utils.save_data_as_file(package_path + "json", metadata)
         Utils.save_data_as_file(package_path + "index.html", index_data.replace("https://files.pythonhosted.org/", "../../"))
@@ -212,6 +222,7 @@ class PypiSyncPackages:
             for index in range(self.updating_info["updated_index"], len(updating_packages)):
                 print("save package: '%s'(index=%d) from '%s'" % (updating_packages[index], index, self.packages_file))
                 self.save_package(updating_packages[index])
+                if
                 self.updating_info["updated_index"] += 1
                 self.updating_info["updated_time"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
                 self.save_updating_info()
@@ -245,7 +256,7 @@ class PypiMirror:
             return Utils.read_json_file(filename)
         else:
             self.set_proxy(True)
-            packages = self.client.list_packages()
+            packages = self.client.list_packages_with_serial()
             self.set_proxy(False)
             Utils.write_json_file(filename, packages)
 
@@ -257,25 +268,24 @@ class PypiMirror:
     def save_updating_info(self):
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
 
-    def loading_updating_packages_from_files(self):
-        updating_packages = []
+    def loading_updating_packages_from_files(self, updating_packages):
         if "updating_names_file" in self.updating_info:
             for filename in self.updating_info["updating_names_file"]:
                 if Utils.is_file_exist(filename + ".info"):
                     info = Utils.read_json_file(filename + ".info")
                 else:
-                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0}
+                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0, "retry_packages": []}
                 packages = Utils.read_json_file(filename)
-                self.updating_info["updated_packages_count"] += info["updated_packages_count"]
-                self.updating_info["updated_file_count"] += info["updated_file_count"]
-                updating_packages += packages[info["updated_index"]:]
-        print("add %d packages from files" % len(updating_packages))
+                data = packages[info["updated_index"]:] + info["retry_packages"]
+                for item in data:
+                    if item["name"] not in updating_packages or item["serial"] > updating_packages[item["name"]]:
+                        updating_packages[item["name"]] = item["serial"]
         return updating_packages
 
     @staticmethod
     def has_new_packages(part, total):
-        for item in part:
-            if item not in total:
+        for name in part.keys():
+            if name not in total:
                 return True
         return False
 
@@ -289,9 +299,8 @@ class PypiMirror:
         self.set_proxy(True)
         cur_serial = self.client.changelog_last_serial()
         self.set_proxy(False)
-        if self.updating_info["serial"] == cur_serial:
-            updating_packages = []
-        elif self.updating_info["serial"] == 0:
+        updating_packages = {}
+        if self.updating_info["serial"] == 0:
             print("====> get all packages ....")
             updating_packages = self.get_all_packages()
         else:
@@ -300,25 +309,27 @@ class PypiMirror:
             data = self.client.changelog_since_serial(self.updating_info["serial"])
             self.set_proxy(False)
             print(json.dumps(data, indent=2))
-            updating_packages = [item[0] for item in data]
-            print("add %d packages from last serial" % len(updating_packages))
+            for name, version, action_time, action, serial in data:
+                if name not in updating_packages or serial > updating_packages[name]:
+                    updating_packages[name] = serial
+        print("updating packages from last serial: %d" % len(updating_packages))
 
         print("loading last updating info....")
-        updating_packages += self.loading_updating_packages_from_files()
+        self.loading_updating_packages_from_files(updating_packages)
+        print("updating packages from last serial: %d" % len(updating_packages))
 
-        updating_packages = list(set(updating_packages))
-        all_packages = self.get_all_packages()
-        if self.has_new_packages(updating_packages, all_packages):
-            # if has new package, re-get all packages
-            os.remove(conf["simple_path"] + ".all")
-            self.get_all_packages()
         if len(updating_packages) == 0:
             print("[exit]====> no need to update, exit ...")
             exit(0)
 
+        all_packages = self.get_all_packages()
+        if self.has_new_packages(updating_packages, all_packages):
+            os.remove(conf["simple_path"] + ".all")
+            self.get_all_packages()
+
+        updating_packages = [{"name": name, "serial": serial} for name, serial in updating_packages.items()]
         print("=====> split updating %d packages into directory ...." % (len(updating_packages)))
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
-        self.updating_info["updating_names_count"] = len(updating_packages)
         self.updating_info["serial"] = cur_serial
         print("mirror info: %s" % self.updating_info)
         self.save_updating_info()
@@ -362,12 +373,9 @@ class PypiMirror:
             pool.close()
             pool.join()
 
-            if not exit_flag:
-                for item in result:
-                    self.updating_info["updated_packages_count"] += item["updated_packages_count"]
-                    self.updating_info["updated_file_count"] += item["updated_file_count"]
-                self.updating_info["updating_names_file"] = []
-                self.updating_info["updating_names_count"] = 0
+            for item in result:
+                self.updating_info["updated_packages_count"] += item["updated_packages_count"]
+                self.updating_info["updated_file_count"] += item["updated_file_count"]
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except SystemExit:
