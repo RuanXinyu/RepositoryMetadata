@@ -25,7 +25,7 @@ sys.setdefaultencoding("utf-8")
 cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
 exit_flag = False
 conf = {
-    "store_path": "D:\\mirrors\\repository\\pypi\\",
+    "store_path": "D:\\mirrors\\repository\\pypi",
     "simple_path": "D:\\mirrors\\repository\\pypi\\simple\\",
     "origin_domain": "pypi.org",
     "hosted_domain": "mirrors.huaweicloud.com/repository/pypi",
@@ -269,7 +269,7 @@ class PypiMirror:
                 self.updating_info["updated_packages_count"] += info["updated_packages_count"]
                 self.updating_info["updated_file_count"] += info["updated_file_count"]
                 updating_packages += packages[info["updated_index"]:]
-        self.save_updating_info()
+        print("add %d packages from files" % len(updating_packages))
         return updating_packages
 
     @staticmethod
@@ -300,19 +300,18 @@ class PypiMirror:
             data = self.client.changelog_since_serial(self.updating_info["serial"])
             self.set_proxy(False)
             print(json.dumps(data, indent=2))
-            names_list = [item[0] for item in data]
-            updating_packages = list(set(names_list))
-
-            # if has new package, re-get all packages
-            all_packages = self.get_all_packages()
-            if self.has_new_packages(updating_packages, all_packages):
-                os.remove(conf["simple_path"] + ".all")
-                self.get_all_packages()
+            updating_packages = [item[0] for item in data]
+            print("add %d packages from last serial" % len(updating_packages))
 
         print("loading last updating info....")
         updating_packages += self.loading_updating_packages_from_files()
-        print("mirror info: %s" % self.updating_info)
 
+        updating_packages = list(set(updating_packages))
+        all_packages = self.get_all_packages()
+        if self.has_new_packages(updating_packages, all_packages):
+            # if has new package, re-get all packages
+            os.remove(conf["simple_path"] + ".all")
+            self.get_all_packages()
         if len(updating_packages) == 0:
             print("[exit]====> no need to update, exit ...")
             exit(0)
@@ -321,6 +320,7 @@ class PypiMirror:
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
         self.updating_info["updating_names_count"] = len(updating_packages)
         self.updating_info["serial"] = cur_serial
+        print("mirror info: %s" % self.updating_info)
         self.save_updating_info()
 
     def split_packages(self, updating_packages):
