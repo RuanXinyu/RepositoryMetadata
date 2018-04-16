@@ -173,6 +173,7 @@ class PypiSyncPackages:
         if not index_data:
             return
         if serial != 0 and serial < package["serial"]:
+            print("[warning]====> %s index expect serial %d, but got %d, : %s" % (package["name"], package["serial"], serial))
             self.updating_info["retry_packages"].append(package)
             return
 
@@ -209,6 +210,7 @@ class PypiSyncPackages:
             self.updating_info["updated_packages_count"] += 1
         metadata, serial = Utils.get_url("https://pypi.org/pypi/%s/json" % package["name"])
         if serial != 0 and serial < package["serial"]:
+            print("[warning]====> %s json expect serial %d, but got %d, : %s" % (package["name"], package["serial"], serial))
             self.updating_info["retry_packages"].append(package)
             return
         if metadata:
