@@ -7,6 +7,7 @@ import os
 import xmlrpclib
 import sys
 import datetime
+import urllib
 import urllib2
 import urlparse
 import httplib
@@ -184,15 +185,18 @@ class PypiSyncPackages:
 
         if "releases" not in metadata:
             return
+        items = []
+        for v in metadata["releases"].values():
+            items += v
 
-        for item in metadata["releases"].values():
+        for item in items:
             self.check_exit_flag()
             url_prefix = "https://files.pythonhosted.org/packages/"
             if not item["url"].startswith(url_prefix):
                 raise BaseException("[error]====> download url is not match: %s " % item["url"])
 
             url_data = urlparse.urlsplit(item["url"])
-            filename = conf["store_path"] + url_data[2]
+            filename = conf["store_path"] + urllib.unquote(url_data[2])
             if Utils.is_file_exist(filename):
                 continue
 
@@ -288,6 +292,7 @@ class PypiMirror:
     def has_new_packages(part, total):
         for name in part.keys():
             if name not in total:
+                print("find new package %s" % name)
                 return True
         return False
 
@@ -314,11 +319,11 @@ class PypiMirror:
             for name, version, action_time, action, serial in data:
                 if name not in updating_packages or serial > updating_packages[name]:
                     updating_packages[name] = serial
-        print("updating packages from last serial: %d" % len(updating_packages))
+        print("updating packages count from last serial: %d" % len(updating_packages))
 
         print("loading last updating info....")
         self.loading_updating_packages_from_files(updating_packages)
-        print("updating packages from last serial: %d" % len(updating_packages))
+        print("total updating packages count: %d" % len(updating_packages))
 
         if len(updating_packages) == 0:
             print("[exit]====> no need to update, exit ...")
