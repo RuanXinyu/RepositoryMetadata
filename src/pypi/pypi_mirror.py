@@ -169,52 +169,53 @@ class PypiSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        index_data, serial = Utils.get_url("https://pypi.org/simple/%s/" % package["name"])
-        if not index_data:
-            return
-        if serial != 0 and serial < package["serial"]:
-            print("[warning]====> %s index expect serial %d, but got %d, : %s" % (package["name"], package["serial"], serial))
-            self.updating_info["retry_packages"].append(package)
-            return
-
-        urls = re.findall('href="([^"]*)"', index_data)
-        for url in urls:
-            self.check_exit_flag()
-            url_prefix = "https://files.pythonhosted.org/packages/"
-            if not url.startswith(url_prefix):
-                raise BaseException("[error]====> download url is not match: %s " % url)
-
-            url_data = urlparse.urlsplit(url)
-            filename = conf["store_path"] + url_data[2]
-            if Utils.is_file_exist(filename):
-                continue
-            if not url_data[4] or not url_data[4].startswith("sha256="):
-                raise BaseException("[error]====> no sha256 value is found in url: %s " % url)
-            sha256 = url_data[4][len("sha256="):]
-
-            data = Utils.get_url(url, timeout=240)
-            if data:
-                Utils.save_data_as_file(filename, data)
-                print("save file: %s" % filename)
-                local_sha256 = Utils.hash("sha256", data)
-                if sha256 != local_sha256:
-                    print("sha256 error: %s, remote: %s, local: %s" % (filename, sha256, local_sha256))
-                    os.remove(filename)
-                    raise BaseException("[error]====> sha256 error")
-                self.updating_info["updated_file_count"] += 1
-                self.save_updating_info()
-
         package_name = re.sub(r"[-_.]+", "-", package["name"]).lower()
         package_path = conf["simple_path"] + package_name + os.path.sep
         if not Utils.is_file_exist(package_path + "json"):
             self.updating_info["updated_packages_count"] += 1
-        metadata, serial = Utils.get_url("https://pypi.org/pypi/%s/json" % package["name"])
+        metadata_str, serial = Utils.get_url("https://pypi.org/pypi/%s/json" % package["name"])
         if serial != 0 and serial < package["serial"]:
-            print("[warning]====> %s json expect serial %d, but got %d, : %s" % (package["name"], package["serial"], serial))
+            print("[warning]====> %s json expect serial %d, but got %d" % (package["name"], package["serial"], serial))
             self.updating_info["retry_packages"].append(package)
             return
-        if metadata:
-            Utils.save_data_as_file(package_path + "json", metadata)
+        if not metadata_str:
+            return
+        metadata = json.loads(metadata_str)
+
+        if "releases" not in metadata:
+            return
+
+        for item in metadata["releases"].values():
+            self.check_exit_flag()
+            url_prefix = "https://files.pythonhosted.org/packages/"
+            if not item["url"].startswith(url_prefix):
+                raise BaseException("[error]====> download url is not match: %s " % item["url"])
+
+            url_data = urlparse.urlsplit(item["url"])
+            filename = conf["store_path"] + url_data[2]
+            if Utils.is_file_exist(filename):
+                continue
+
+            data, serial = Utils.get_url(item["url"], timeout=240)
+            if data:
+                Utils.save_data_as_file(filename, data)
+                print("save file: %s" % filename)
+                local_sha256 = Utils.hash("sha256", data)
+                if item["digests"]["sha256"] != local_sha256:
+                    print("sha256 error: %s, remote: %s, local: %s" % (filename, item["digests"]["sha256"], local_sha256))
+                    os.remove(filename)
+                    raise BaseException("[error]====> sha256 error")
+                self.updating_info["updated_file_count"] += 1
+                self.save_updating_info()
+        Utils.save_data_as_file(package_path + "json", metadata_str)
+
+        index_data, serial = Utils.get_url("https://pypi.org/simple/%s/" % package["name"])
+        if not index_data:
+            return
+        if serial != 0 and serial < package["serial"]:
+            print("[warning]====> %s index expect serial %d, but got %d" % (package["name"], package["serial"], serial))
+            self.updating_info["retry_packages"].append(package)
+            return
         Utils.save_data_as_file(package_path + "index.html", index_data.replace("https://files.pythonhosted.org/", "../../"))
 
     def run(self):
@@ -224,7 +225,6 @@ class PypiSyncPackages:
             for index in range(self.updating_info["updated_index"], len(updating_packages)):
                 print("save package: '%s'(index=%d) from '%s'" % (updating_packages[index], index, self.packages_file))
                 self.save_package(updating_packages[index])
-                if
                 self.updating_info["updated_index"] += 1
                 self.updating_info["updated_time"] = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
                 self.save_updating_info()
@@ -262,7 +262,7 @@ class PypiMirror:
             self.set_proxy(False)
             Utils.write_json_file(filename, packages)
 
-            index_data = Utils.get_url("https://pypi.org/simple/")
+            index_data, serial = Utils.get_url("https://pypi.org/simple/")
             index_data = re.sub("/simple/", "/repository/pypi/simple/", index_data)
             Utils.save_data_as_file(conf["simple_path"] + "index.html", index_data)
             return packages
