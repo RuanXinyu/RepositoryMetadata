@@ -347,7 +347,7 @@ class ComposerMirror:
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
 
     def load_updated_packages_from_files(self):
-        if "updating_names_file" not in self.updating_info:
+        if "updating_names_file" not in self.updating_info or len(self.updating_info["updating_names_file"]) == 0:
             return
 
         lock_file = os.path.dirname(self.updating_info["updating_names_file"][0]) + os.path.sep + "lock"

@@ -136,7 +136,7 @@ class NpmSyncPackages:
     def __init__(self, packages_filename):
         self.packages_file = packages_filename
         self.packages_info_file = packages_filename + ".info"
-        self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0}
+        self.updating_info = {"filename": packages_filename, "updated_index": 0, "updated_packages_count": 0, "updated_file_count": 0, "retry_packages": []}
 
     def load_packages(self):
         if not Utils.is_file_exist(self.packages_info_file):
@@ -158,14 +158,11 @@ class NpmSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        if conf["options"] == "fix" and Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
-            metadata = Utils.read_json_file(conf["package_path"] + package + "/index.json")
+        metadata_str = Utils.get_url("https://registry.npmjs.org/%s" % package["id"].replace("/", "%2f"))
+        if metadata_str:
+            metadata = json.loads(metadata_str)
         else:
-            metadata_str = Utils.get_url("https://replicate.npmjs.com/%s" % package.replace("/", "%2f"))
-            if metadata_str:
-                metadata = json.loads(metadata_str)
-            else:
-                return
+            return
 
         if metadata and "versions" in metadata:
             for version in metadata["versions"].values():
@@ -174,21 +171,11 @@ class NpmSyncPackages:
                     continue
 
                 url = version["dist"]["tarball"]
-                if not url.endswith(".tgz"):
+                match_domain = "://" + conf["origin_domain"] + "/"
+                if not url.endswith(".tgz") or url.find(match_domain) == -1:
                     continue
 
-                match_domain = "://" + conf["origin_domain"] + "/"
-                index = url.find(match_domain)
-                if index != -1:
-                    filename = url[index + len(match_domain):]
-                else:
-                    match_domain = conf["hosted_domain"] + "/"
-                    index = url.find(match_domain)
-                    if index != -1:
-                        filename = url[index + len(match_domain):]
-                    else:
-                        continue
-                    url = "https://%s/%s" % (conf["origin_domain"], filename)
+                filename = url[index + len(match_domain):]
                 full_filename = conf["package_path"] + filename
 
                 if not Utils.is_file_exist(full_filename):
@@ -200,7 +187,6 @@ class NpmSyncPackages:
                         if "shasum" in version["dist"] and version["dist"]["shasum"] != local_sha1:
                             print("[error]====> sha1 error: %s, remote: %s, local: %s" % (full_filename, version["dist"]["shasum"], local_sha1))
                             os.remove(full_filename)
-                            # Utils.write_file(cur_dir + "bad_sha1.error", url + "\n", mode="a")
                             raise BaseException("[error]====> sha1 error")
                         self.updating_info["updated_file_count"] += 1
                         self.save_updating_info()
@@ -208,9 +194,13 @@ class NpmSyncPackages:
                 if Utils.is_file_exist(full_filename):
                     version["dist"]["tarball"] = conf["hosted_domain"] + "/" + filename
 
-        if not Utils.is_file_exist(conf["package_path"] + package + "/index.json"):
+        if not Utils.is_file_exist(conf["package_path"] + package["id"] + "/index.json"):
             self.updating_info["updated_packages_count"] += 1
-        Utils.save_data_as_file(conf["package_path"] + package + "/index.json", json.dumps(metadata))
+        Utils.save_data_as_file(conf["package_path"] + package["id"] + "/index.json", json.dumps(metadata))
+
+        if "_rev" in metadata and package["rev"] != "" and metadata["_rev"] != package["rev"]:
+            print("[warning]====> %s json expect rev %d, but got %d" % (package["id"], package["rev"], metadata["_rev"]))
+            self.updating_info["retry_packages"].append(package)
 
     def run(self):
         try:
@@ -238,57 +228,55 @@ class NpmMirror:
         self.cur_dir = os.path.dirname(os.path.realpath(__file__)) + os.path.sep
         self.updating_info_filename = self.cur_dir + "updating_info.json"
         self.thread_count = thread_count
-        self.updating_info = {"last_serial": 0, "cur_serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
+        self.updating_info = {"serial": 0, "updated_packages_count": 0, "updated_file_count": 0}
 
     @staticmethod
-    def get_total_doc_count():
-        info = Utils.get_url("https://replicate.npmjs.com/_design/app/_view/updated?limit=1")
-        return json.loads(info)["total_rows"]
+    def get_last_update_seq():
+        db_info = json.loads(Utils.get_url("https://replicate.npmjs.com", timeout=60))
+        return db_info["update_seq"]
 
     @staticmethod
     def get_all_packages():
+        self.updating_info["serial"]) = self.get_last_update_seq()
         filename = conf["package_path"] + "-/all"
         print("get all docs from 'https://replicate.npmjs.com/_all_docs'")
         all_packages = Utils.get_url("https://replicate.npmjs.com/_all_docs", timeout=600)
         Utils.save_data_as_file(filename, all_packages)
         all_packages = json.loads(all_packages)
-        return [item["id"] for item in all_packages["rows"]]
+        data = {}
+        for item in all_packages["rows"]:
+            data[item["id"]] = {"rev_num": 0, "rev": ""}
+        return data
 
-    def changelog_since_serial(self, serial):
-        total_count = self.get_total_doc_count()
-        print("total count = %d" % total_count)
-        updating_packages = []
-        for count in range(500, total_count, 500):
-            json_str = Utils.get_url("https://replicate.npmjs.com/_design/app/_view/updated?skip=%d&limit=501" % (total_count - count))
-            rows = json.loads(json_str)["rows"]
-            if count == 500:
-                self.updating_info["cur_serial"] = Utils.to_timestamp(rows[-1]["key"])
-            if Utils.to_timestamp(rows[0]["key"]) >= serial:
-                updating_packages += [row["id"] for row in rows]
-            else:
-                for index in range(1, len(rows)):
-                    if Utils.to_timestamp(rows[index]["key"]) >= serial:
-                        updating_packages += [row["id"] for row in rows[index:]]
-                        return updating_packages
-                return updating_packages
+    def changelog_since_serial(self):
+        changes = json.loads(Utils.get_url("https://replicate.npmjs.com/_changes?feed=normal&since=%d" % self.updating_info["serial"]))
+        updating_packages = {}
+        for item in changes["results"]:
+            rev_info = {"rev_num": 0, "rev": ""}
+            for change in item["changes"]:
+                rev = int(change["rev"].split("-")[0])
+                if rev > rev_info["rev_num]:
+                    rev_info = {"rev_num": rev, "rev": change["rev"]}
+            if item["id"] not in updating_packages and updating_packages[item["id"]]["rev_num"] < rev_info["rev_num"]:
+                updating_packages[item["id"]] = {"rev_num": rev_info["rev_num"], "rev": rev_info["rev"]}
+        self.updating_info["serial"]) = changes["last_seq"]
         return updating_packages
 
     def save_updating_info(self):
         Utils.write_json_file(self.updating_info_filename, self.updating_info)
 
-    def loading_updating_packages_from_files(self):
-        updating_packages = []
+    def loading_updating_packages_from_files(self, updating_packages):
         if "updating_names_file" in self.updating_info:
             for filename in self.updating_info["updating_names_file"]:
                 if Utils.is_file_exist(filename + ".info"):
                     info = Utils.read_json_file(filename + ".info")
                 else:
-                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0}
+                    info = {"updated_packages_count": 0, "updated_file_count": 0, "updated_index": 0, "retry_packages": []}
                 packages = Utils.read_json_file(filename)
-                self.updating_info["updated_packages_count"] += info["updated_packages_count"]
-                self.updating_info["updated_file_count"] += info["updated_file_count"]
-                updating_packages += packages[info["updated_index"]:]
-        self.save_updating_info()
+                data = packages[info["updated_index"]:] + info["retry_packages"]
+                for item in data:
+                    if item["id"] not in updating_packages or updating_packages[item["id"]]["rev_num"] < item["rev_num"]:
+                        updating_packages[item["id"]] = {"rev_num": item["rev_num"], "rev": item["rev"]}
         return updating_packages
 
     def load_mirror_info(self):
@@ -298,30 +286,25 @@ class NpmMirror:
             self.updating_info = Utils.read_json_file(self.updating_info_filename)
         print("mirror info '%s': %s" % (self.updating_info_filename, self.updating_info))
 
-        if self.updating_info["cur_serial"] == 0:
-            if conf["options"] == "fix":
-                print("begin getting fixing packages....")
-                updating_packages = self.get_all_packages()
-                self.updating_info["cur_serial"] = self.updating_info["last_serial"]
-            else:
-                if self.updating_info["last_serial"] == 0:
-                    self.updating_info["cur_serial"] = Utils.to_timestamp(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%fZ"))
-                    updating_packages = self.get_all_packages()
-                else:
-                    names_list = self.changelog_since_serial(self.updating_info["last_serial"])
-                    updating_packages = list(set(names_list))
+        updating_packages = {}
+        if self.updating_info["serial"] == 0:
+            print("====> get all packages ....")
+            updating_packages = self.get_all_packages()
         else:
-            print("continue last updating, loading updating info....")
-            updating_packages = self.loading_updating_packages_from_files()
-            print("reload mirror info: %s" % self.updating_info)
+            print("====> get changelog_since_serial %d ...." % self.updating_info["serial"])
+            updating_packages = self.changelog_since_serial()
+        print("updating packages count from last serial: %d" % len(updating_packages))
+
+        print("loading last updating info....")
+        self.loading_updating_packages_from_files(updating_packages)
+        print("total updating packages count: %d" % len(updating_packages))
 
         if len(updating_packages) == 0:
             print("[exit]====> no need to update, exit ...")
-            self.updating_info["cur_serial"] = 0
-            self.save_updating_info()
             exit(0)
 
-        print("=====> split updating %d packages into %s directory ...." % (len(updating_packages), self.updating_info["last_serial"]))
+        updating_packages = [{"id": name, "rev_num": rev["rev_num"], "rev": rev["rev"]} for name, rev in updating_packages.items()]
+        print("=====> split updating %d packages into directory ...." % len(updating_packages))
         self.updating_info["updating_names_file"] = self.split_packages(updating_packages)
         self.updating_info["updating_names_count"] = len(updating_packages)
         self.save_updating_info()
@@ -365,16 +348,9 @@ class NpmMirror:
             pool.close()
             pool.join()
 
-            if not exit_flag:
-                for item in result:
-                    self.updating_info["updated_packages_count"] += item["updated_packages_count"]
-                    self.updating_info["updated_file_count"] += item["updated_file_count"]
-                self.updating_info["last_serial"] = self.updating_info["cur_serial"]
-                self.updating_info["cur_serial"] = 0
-                self.updating_info["updating_names_file"] = []
-                self.updating_info["updating_names_count"] = 0
-                if os.path.exists(cur_dir + "fix"):
-                    os.remove(cur_dir + 'fix')
+            for item in result:
+                self.updating_info["updated_packages_count"] += item["updated_packages_count"]
+                self.updating_info["updated_file_count"] += item["updated_file_count"]
             self.save_updating_info()
             print("[main exit]====>: %s" % self.updating_info)
         except SystemExit:
@@ -386,8 +362,6 @@ class NpmMirror:
 
 if __name__ == "__main__":
     print("\n\n\n==============[start]: %s===============\n\n" % time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time())))
-    if os.path.exists(cur_dir + "fix"):
-        conf["options"] = "fix"
     Utils.create_dir(conf["package_path"])
     npm = NpmMirror()
     npm.run()
