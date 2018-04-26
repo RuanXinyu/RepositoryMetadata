@@ -9,6 +9,10 @@ pypi_mirror
 *.zip
 *.tar
 *.gz
+*.csv
+*.png
+*.xlsx
+reports
 
 # C extensions
 *.so

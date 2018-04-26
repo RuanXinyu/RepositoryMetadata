@@ -1,0 +1,28 @@
+{
+    "require": {
+        "symfony/symfony": "*",
+        "google/apiclient": "*",
+        "guzzlehttp/guzzle": "*",
+        "pressbooks/pressbooks": "*",
+        "composer/installers": "*",
+        "predis/predis": "*",
+        "nunomaduro/collision": "*",
+        "ruflin/elastica": "*",
+        "kriswallsmith/buzz": "*",
+        "elasticsearch/elasticsearch": "*",
+        "wp-cli/wp-cli": "*",
+        "seld/cli-prompt": "*",
+        "league/climate": "*",
+        "league/oauth2-client": "*",
+        "php-http/httplug": "*",
+        "php-http/discovery": "*",
+        "tracy/tracy": "*",
+        "facebook/webdriver": "*"
+    },
+    "repositories": {
+        "packagist": {
+            "type": "composer",
+            "url": "https://packagist.phpcomposer.com/"
+        }
+    }
+}
