@@ -158,7 +158,7 @@ class NpmSyncPackages:
             raise BaseException("exit flag is true, raise an exit exception")
 
     def save_package(self, package):
-        metadata_str = Utils.get_url("https://registry.npmjs.org/%s" % package["id"].replace("/", "%2f"))
+        metadata_str = Utils.get_url("https://replicate.npmjs.com/registry/%s" % package["id"].replace("/", "%2f"))
         if metadata_str:
             metadata = json.loads(metadata_str)
         else:
@@ -172,7 +172,8 @@ class NpmSyncPackages:
 
                 url = version["dist"]["tarball"]
                 match_domain = "://" + conf["origin_domain"] + "/"
-                if not url.endswith(".tgz") or url.find(match_domain) == -1:
+                index = url.find(match_domain)
+                if not url.endswith(".tgz") or index == -1:
                     continue
 
                 filename = url[index + len(match_domain):]
@@ -199,7 +200,7 @@ class NpmSyncPackages:
         Utils.save_data_as_file(conf["package_path"] + package["id"] + "/index.json", json.dumps(metadata))
 
         if "_rev" in metadata and package["rev"] != "" and metadata["_rev"] != package["rev"]:
-            print("[warning]====> %s json expect rev %d, but got %d" % (package["id"], package["rev"], metadata["_rev"]))
+            print("[warning]====> %s json expect rev %s, but got %s" % (package["id"], package["rev"], metadata["_rev"]))
             self.updating_info["retry_packages"].append(package)
 
     def run(self):
@@ -232,34 +233,35 @@ class NpmMirror:
 
     @staticmethod
     def get_last_update_seq():
-        db_info = json.loads(Utils.get_url("https://replicate.npmjs.com", timeout=60))
+        db_info = json.loads(Utils.get_url("https://replicate.npmjs.com/registry", timeout=60))
         return db_info["update_seq"]
 
-    @staticmethod
-    def get_all_packages():
-        self.updating_info["serial"]) = self.get_last_update_seq()
+    def get_all_packages(self):
+        self.updating_info["serial"] = self.get_last_update_seq()
         filename = conf["package_path"] + "-/all"
-        print("get all docs from 'https://replicate.npmjs.com/_all_docs'")
-        all_packages = Utils.get_url("https://replicate.npmjs.com/_all_docs", timeout=600)
+        print("get all docs from 'https://replicate.npmjs.com/registry/_all_docs'")
+        all_packages = Utils.get_url("https://replicate.npmjs.com/registry/_all_docs", timeout=600)
         Utils.save_data_as_file(filename, all_packages)
         all_packages = json.loads(all_packages)
         data = {}
         for item in all_packages["rows"]:
-            data[item["id"]] = {"rev_num": 0, "rev": ""}
+            rev_num = int(item["value"]["rev"].split("-")[0])
+            if item["id"] not in data or data[item["id"]]["rev_num"] < rev_num:
+                data[item["id"]] = {"rev_num": rev_num, "rev": item["value"]["rev"]}
         return data
 
     def changelog_since_serial(self):
-        changes = json.loads(Utils.get_url("https://replicate.npmjs.com/_changes?feed=normal&since=%d" % self.updating_info["serial"]))
+        changes = json.loads(Utils.get_url("https://replicate.npmjs.com/registry/_changes?feed=normal&since=%d" % self.updating_info["serial"]))
         updating_packages = {}
         for item in changes["results"]:
             rev_info = {"rev_num": 0, "rev": ""}
             for change in item["changes"]:
                 rev = int(change["rev"].split("-")[0])
-                if rev > rev_info["rev_num]:
+                if rev > rev_info["rev_num"]:
                     rev_info = {"rev_num": rev, "rev": change["rev"]}
-            if item["id"] not in updating_packages and updating_packages[item["id"]]["rev_num"] < rev_info["rev_num"]:
+            if item["id"] not in updating_packages or updating_packages[item["id"]]["rev_num"] < rev_info["rev_num"]:
                 updating_packages[item["id"]] = {"rev_num": rev_info["rev_num"], "rev": rev_info["rev"]}
-        self.updating_info["serial"]) = changes["last_seq"]
+        self.updating_info["serial"] = changes["last_seq"]
         return updating_packages
 
     def save_updating_info(self):
