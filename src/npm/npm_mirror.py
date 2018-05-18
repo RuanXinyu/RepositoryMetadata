@@ -23,8 +23,7 @@ exit_flag = False
 conf = {
     "package_path": "D:\\mirrors\\repository\\npm\\",
     "origin_domain": "registry.npmjs.org",
-    "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm",
-    "options": "update"
+    "hosted_domain": "https://mirrors.huaweicloud.com/repository/npm"
 }
 
 
