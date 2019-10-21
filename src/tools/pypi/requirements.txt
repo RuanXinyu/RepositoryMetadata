@@ -64,5 +64,5 @@ South==1.0.2
 uplink==0.5.1
 uritemplate==3.0.0
 urllib3==1.22
-Werkzeug==0.14.1
+Werkzeug==0.15.3
 wrapt==1.10.11
