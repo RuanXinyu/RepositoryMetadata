@@ -47,7 +47,7 @@ numpy==1.14.2
 oauthlib==2.0.7
 opps==0.2.15
 opps-piston==0.2.4
-Pillow==2.9.0
+Pillow==8.1.1
 pluggy==0.6.0
 py==1.5.3
 pylint==1.8.4
