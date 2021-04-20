@@ -49,7 +49,7 @@ opps==0.2.15
 opps-piston==0.2.4
 Pillow==2.9.0
 pluggy==0.6.0
-py==1.5.3
+py==1.10.0
 pylint==1.8.4
 pytest==3.5.0
 pytest-profiling==1.3.0
