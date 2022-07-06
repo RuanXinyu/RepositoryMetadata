@@ -37,7 +37,7 @@ JSON-minify==0.3.0
 kombu==3.0.37
 lazy-object-proxy==1.3.1
 libthumbor==1.3.2
-lxml==4.2.1
+lxml==4.9.1
 magicdate==0.2.2
 MarkupSafe==1.0
 mccabe==0.6.1
